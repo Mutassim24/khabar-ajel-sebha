@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="خبر عاجل سبها - متجر إكسسوارات الهواتف المحمولة">
+<title>خبر عاجل سبها | متجر إكسسوارات الهواتف</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="topline">🚚 خدمة الزبائن والطلبات عبر واتساب · عروض متجددة</div>
+<header class="header">
+  <a class="brand" href="#"><span class="brandmark">خ</span><span><b>خبر عاجل سبها</b><small>إكسسوارات الهواتف المحمولة</small></span></a>
+  <div class="search"><span>⌕</span><input id="searchInput" placeholder="ابحث عن شاحن، جراب، سماعة أو موديل هاتف..." aria-label="بحث المنتجات"><button id="searchBtn">بحث</button></div>
+  <div class="header-actions"><button class="iconbtn" id="favBtn" title="المفضلة">♡ <span>المفضلة</span></button><button class="iconbtn" id="cartBtn" title="السلة">🛒 <span>السلة</span><i id="cartCount">0</i></button></div>
+</header>
+<nav class="nav" id="navCategories"><a class="active" data-cat="الكل">الرئيسية</a><a data-cat="الشواحن">الشواحن</a><a data-cat="الكيابل">الكيابل</a><a data-cat="الجرابات">الجرابات</a><a data-cat="الحمايات">الحمايات</a><a data-cat="السماعات">السماعات</a><a data-cat="الباور بانك">الباور بانك</a><a data-cat="إكسسوارات السيارات">السيارات</a><a data-cat="الساعات الذكية">الساعات الذكية</a><a data-cat="الألعاب">الألعاب</a><a data-cat="أدوات الصيانة">الصيانة</a></nav>
+<main>
+<section class="hero">
+ <div class="hero-copy"><span class="eyebrow">متجرك الموثوق في سبها</span><h1>كل ما يحتاجه<br><em>هاتفك في مكان واحد</em></h1><p>اكتشف تشكيلة واسعة من الشواحن، الجرابات، السماعات، الحمايات والمزيد.</p><button class="primary" id="browseBtn">تصفح المنتجات <b>←</b></button></div>
+ <div class="hero-art"><div class="orb"></div><div class="hero-product">⚡<small>FAST<br>CHARGING</small></div><div class="floating f1">🔋</div><div class="floating f2">🎧</div><div class="floating f3">📱</div></div>
+</section>
+<section class="benefits"><div>🚀 <span><b>منتجات متنوعة</b><small>كل الإكسسوارات بمكان واحد</small></span></div><div>🛍️ <span><b>جملة وقطاعي</b><small>خيارات تناسب الجميع</small></span></div><div>💬 <span><b>طلب سهل</b><small>تواصل مباشر عبر واتساب</small></span></div><div>📦 <span><b>متابعة الطلب</b><small>خدمة زبائن متواصلة</small></span></div></section>
+<section class="section"><div class="section-head"><div><span class="eyebrow">تسوق حسب احتياجك</span><h2>الأقسام الرئيسية</h2></div><button class="textbtn" id="allCategories">عرض المنتجات ←</button></div><div class="categories" id="categoryTiles"></div></section>
+<section class="section products-section"><div class="section-head"><div><span class="eyebrow">اختيارات المتجر</span><h2 id="productsHeading">منتجاتنا</h2><p class="muted">الأسعار والمنتجات المعروضة أمثلة قابلة للتعديل من لوحة الإدارة لاحقاً.</p></div><div class="filters"><select id="sortSelect"><option value="default">ترتيب افتراضي</option><option value="price-asc">السعر: الأقل أولاً</option><option value="price-desc">السعر: الأعلى أولاً</option><option value="name">الاسم</option></select></div></div><div class="product-grid" id="productGrid"></div><div class="empty hidden" id="emptyState">لم نعثر على منتجات مطابقة لبحثك.</div></section>
+<section class="wholesale"><div><span class="eyebrow">لأصحاب المحلات والفنيين</span><h2>تبحث عن أسعار الجملة؟</h2><p>تواصل معنا للحصول على عروض الكميات وأسعار التجار.</p></div><button class="primary" id="wholesaleBtn">استفسر عن الجملة ↗</button></section>
+</main>
+<footer><div class="footer-brand"><span class="brandmark">خ</span><b>خبر عاجل سبها</b><p>وجهتك لإكسسوارات الهواتف المحمولة.</p></div><div><b>روابط سريعة</b><a href="#">الرئيسية</a><a href="#categoryTiles">الأقسام</a><a href="#productsHeading">المنتجات</a></div><div><b>خدمة العملاء</b><a href="#" id="footerWhatsApp">واتساب</a><a href="#">سياسة الاستبدال</a><a href="#">اتصل بنا</a></div><div class="copyright">© 2026 خبر عاجل سبها · جميع الحقوق محفوظة</div></footer>
+<div class="toast" id="toast"></div>
+<aside class="drawer" id="cartDrawer" aria-hidden="true"><div class="drawer-head"><h3>سلة المشتريات</h3><button id="closeCart">✕</button></div><div id="cartItems" class="drawer-items"></div><div class="cart-bottom"><div class="total"><span>الإجمالي</span><b id="cartTotal">0 د.ل</b></div><button class="primary full" id="checkoutBtn">إتمام الطلب عبر واتساب</button><small>يتم إرسال الطلب للتأكيد عبر واتساب.</small></div></aside><div class="overlay" id="overlay"></div>
+<script src="app.js"></script>
+</body></html>

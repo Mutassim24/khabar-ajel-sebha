@@ -1,0 +1,15 @@
+{
+  "name": "khabar-ajel-sebha-store",
+  "version": "2.1.0",
+  "private": true,
+  "description": "متجر خبر عاجل سبها — متجر إلكتروني لإكسسوارات الهواتف وقطع الغيار (Node.js + SQLite, بدون مكتبات خارجية)",
+  "main": "server.js",
+  "engines": { "node": ">=22.5" },
+  "scripts": {
+    "start": "node server.js",
+    "dev": "SEED_SAMPLE_PRODUCTS=true node --watch server.js",
+    "test": "node tests/catalog.test.js && node tests/e2e.js",
+    "admin:reset": "node scripts/reset-admin.js"
+  },
+  "license": "UNLICENSED"
+}

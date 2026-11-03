@@ -1,0 +1,25 @@
+# Fly.io: fly launch --no-deploy && fly volumes create store_data --region fra --size 1 && fly deploy
+app = "khabar-ajel-sebha"
+primary_region = "fra"
+
+[build]
+
+[env]
+  NODE_ENV = "production"
+  DATA_DIR = "/data"
+  PORT = "3000"
+
+[[mounts]]
+  source = "store_data"
+  destination = "/data"
+
+[http_service]
+  internal_port = 3000
+  force_https = true
+  auto_stop_machines = "off"
+  min_machines_running = 1
+
+[[http_service.checks]]
+  path = "/healthz"
+  interval = "30s"
+  timeout = "5s"

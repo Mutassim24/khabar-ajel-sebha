@@ -1,0 +1,29 @@
+# Render Blueprint — New > Blueprint > اختر هذا المستودع
+services:
+  - type: web
+    name: khabar-ajel-sebha
+    runtime: node
+    plan: starter            # الخطة المجانية لا تدعم الأقراص الدائمة
+    region: frankfurt        # الأقرب إلى ليبيا
+    buildCommand: "echo no build needed"
+    startCommand: node server.js
+    healthCheckPath: /healthz
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: NODE_ENV
+        value: production
+      - key: DATA_DIR
+        value: /var/data
+      - key: SESSION_SECRET
+        generateValue: true
+      - key: ADMIN_EMAIL
+        sync: false          # يطلبها Render عند الإنشاء
+      - key: ADMIN_PASSWORD
+        sync: false
+      - key: SEED_SAMPLE_PRODUCTS
+        value: "false"
+    disk:
+      name: store-data
+      mountPath: /var/data
+      sizeGB: 1
