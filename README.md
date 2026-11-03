@@ -47,8 +47,8 @@ node scripts/reset-admin.js admin@example.com "كلمة-مرور-جديدة-قو
 ```bash
 # 1) تثبيت Node.js 22 و git
 curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash - && sudo apt install -y nodejs git
-# 2) تنزيل المتجر من GitHub
-sudo git clone https://github.com/<حسابك>/khabar-ajel-sebha.git /opt/khabar && cd /opt/khabar
+# 2) تنزيل المتجر من GitHub (المستودع خاص: GitHub يطلب اسم المستخدم و Personal Access Token بدل كلمة السر)
+sudo git clone https://github.com/Mutassim24/khabar-ajel-sebha.git /opt/khabar && cd /opt/khabar
 sudo cp .env.example .env && sudo nano .env    # ADMIN_EMAIL, ADMIN_PASSWORD, SESSION_SECRET, DATA_DIR=/var/lib/khabar
 # 3) تشغيله كخدمة دائمة
 sudo tee /etc/systemd/system/khabar.service >/dev/null <<'EOF'
