@@ -42,7 +42,16 @@ node scripts/reset-admin.js admin@example.com "كلمة-مرور-جديدة-قو
 
 أي تعديل ترفعه إلى GitHub يُنشر تلقائياً، والبيانات تبقى محفوظة على القرص.
 
-### على VPS خاص (Ubuntu 22.04/24.04)
+### على VPS خاص (Ubuntu 22.04/24.04) — بأمر واحد
+
+من Terminal السيرفر (كـ root):
+```bash
+git clone https://github.com/Mutassim24/khabar-ajel-sebha.git /opt/khabar   # يطلب اسم المستخدم و Token لأن المستودع خاص
+cd /opt/khabar && bash scripts/install-vps.sh khabarsebha.com you@example.com
+```
+السكربت يركّب Node.js 22 و Caddy (HTTPS مجاني) وخدمة دائمة، ويطبع كلمة سر لوحة التحكم في الآخر. اربط الدومين (سجل A) على IP السيرفر.
+
+#### الطريقة اليدوية (نفس الخطوات بالتفصيل)
 
 ```bash
 # 1) تثبيت Node.js 22 و git
