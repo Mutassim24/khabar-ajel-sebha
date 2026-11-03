@@ -22,9 +22,11 @@
   const saveFavs = () => { store.set('ka_favs', favs); syncCounts(); syncFavButtons(); };
 
   async function api(url, body) {
-    const res = await fetch(url, body ? { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) } : {});
+    let res;
+    try { res = await fetch(url, body ? { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) } : {}); }
+    catch { throw new Error('تعذّر الاتصال بالإنترنت، تأكد من الشبكة وحاول مرة أخرى'); }
     let data = null; try { data = await res.json(); } catch {}
-    if (!res.ok) { const e = new Error((data && data.error) || 'تعذّر الاتصال بالخادم'); e.data = data; e.status = res.status; throw e; }
+    if (!res.ok) { const e = new Error((data && data.error) || 'حدث خطأ في الخادم، حاول مرة أخرى'); e.data = data; e.status = res.status; throw e; }
     return data;
   }
 
@@ -76,7 +78,7 @@
       // drop products that no longer exist, clamp quantities to stock
       if (q.removed.length) { cart = cart.filter((x) => !q.removed.includes(x.id)); saveCart(); toast('تمت إزالة منتج لم يعد متاحاً من السلة', true); }
       lastQuote = q; renderCart(q); if (co) renderCheckout(q);
-    } catch (e) { targets.forEach((t) => { t.innerHTML = `<div class="empty-box sm"><p>${esc(e.message)}</p></div>`; }); }
+    } catch (e) { targets.forEach((t) => { t.innerHTML = `<div class="empty-box sm"><p>${esc(e.message)}</p><button class="btn ghost sm" type="button" data-retry-cart>إعادة المحاولة</button></div>`; }); }
   }
   const thumb = (l) => (l.image_id ? `<img src="/media/${l.image_id}?w=160" alt="" loading="lazy">` : esc(l.icon || '📱'));
   function renderCart(q) {
@@ -129,6 +131,7 @@
   document.addEventListener('click', (e) => {
     if (e.target.closest('[data-open-cart]')) { e.preventDefault(); openCart(); }
     if (e.target.closest('[data-close-cart]')) closeCart();
+    if (e.target.closest('[data-retry-cart]')) refreshCart();
   });
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && drawer && drawer.classList.contains('open')) closeCart(); });
 
@@ -154,16 +157,47 @@
     }
     const buyNow = e.target.closest('[data-buy-now]');
     if (buyNow) { addToCart(buyNow.dataset.buyNow, Number($('[data-qty]')?.value) || 1, true); location.href = '/checkout'; }
-    const wa = e.target.closest('[data-wa-text]');
+    const wa = e.target.closest('[data-wa-text],[data-wa-product]');
     if (wa) {
-      let n = document.body.dataset.whatsapp || '';
-      if (n.startsWith('0')) n = '218' + n.slice(1);
-      if (n) window.open(`https://wa.me/${n}?text=${encodeURIComponent(wa.dataset.waText)}`, '_blank', 'noopener');
+      e.preventDefault();
+      let text = wa.dataset.waText;
+      if (!text) {
+        const qty = wa.hasAttribute('data-wa-ask') || wa.closest('.pdp') ? Math.max(1, Number($('[data-qty]')?.value) || 1) : 1;
+        text = [`السلام عليكم، أبي أطلب / أعرف سعر وتوفر المنتج:`, `${wa.dataset.waProduct}`, `رقم المنتج: ${wa.dataset.waSku}`, `الكمية: ${qty}`, location.origin + wa.dataset.waUrl].join('\n');
+      }
+      openWhatsApp(text);
+    }
+    if (e.target.closest('[data-wa-close]') || e.target.matches('[data-wa-pick]')) $('[data-wa-pick]').hidden = true;
+    const num = e.target.closest('[data-wa-num]');
+    if (num) { $('[data-wa-pick]').hidden = true; window.open(`https://wa.me/${num.dataset.waNum}?text=${encodeURIComponent(pendingWa)}`, '_blank', 'noopener'); }
+    if (e.target.closest('[data-theme-toggle]')) {
+      const dark = !isDark();
+      document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
+      try { localStorage.setItem('ka_theme', dark ? 'dark' : 'light'); } catch {}
+      toast(dark ? 'تم تفعيل الوضع الليلي 🌙' : 'تم تفعيل الوضع النهاري ☀️');
     }
   });
+  const isDark = () => { const t = document.documentElement.getAttribute('data-theme'); return t ? t === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches; };
+  // WhatsApp: one number opens directly, two numbers let the customer choose
+  let pendingWa = '';
+  function openWhatsApp(text) {
+    const nums = (document.body.dataset.whatsapp || '').split(',').filter(Boolean);
+    if (!nums.length) { location.href = '/page/contact'; return; }
+    if (nums.length === 1) { window.open(`https://wa.me/${nums[0]}?text=${encodeURIComponent(text)}`, '_blank', 'noopener'); return; }
+    pendingWa = text; const pick = $('[data-wa-pick]'); pick.hidden = false; pick.querySelector('[data-wa-num]').focus();
+  }
+  document.addEventListener('keydown', (e) => { const pick = $('[data-wa-pick]'); if (e.key === 'Escape' && pick && !pick.hidden) pick.hidden = true; });
 
+  // quantity stepper for "price on request" products (sent in the WhatsApp message)
+  const ask = $('[data-ask]');
+  if (ask) {
+    const inp = $('[data-qty]', ask);
+    const fix = () => { inp.value = Math.min(999, Math.max(1, Math.floor(Number(inp.value) || 1))); };
+    ask.addEventListener('click', (e) => { const s = e.target.closest('[data-step]'); if (s) { inp.value = Number(inp.value) + Number(s.dataset.step); fix(); } });
+    inp.addEventListener('change', fix);
+  }
   // quantity stepper on product page (+ live wholesale note)
-  const buy = $('.buy');
+  const buy = $('.buy:not([data-ask])');
   if (buy) {
     const inp = $('[data-qty]', buy); const max = Math.max(1, Number(buy.dataset.max) || 1);
     const ws = Number(buy.dataset.ws); const wsMin = Number(buy.dataset.wsMin); const retail = Number(buy.dataset.retail);
@@ -185,6 +219,9 @@
     const main = $('[data-g-main]'); if (main) main.src = b.dataset.gThumb;
     $$('[data-g-thumb]').forEach((x) => x.classList.toggle('on', x === b));
   }));
+
+  // filters: open on wide screens, collapsed on phones so products show first
+  $$('[data-filters]').forEach((d) => { if (matchMedia('(min-width: 980px)').matches) d.open = true; });
 
   // sort select
   $$('[data-autosubmit]').forEach((s) => s.addEventListener('change', () => s.form.submit()));
@@ -311,6 +348,17 @@
       cf.innerHTML = '<div class="empty-box sm"><span>✅</span><p>تم إرسال رسالتك بنجاح، سنتواصل معك قريباً.</p></div>';
     } catch (ex) { btn.disabled = false; err.hidden = false; err.textContent = ex.message; }
   });
+
+  // keep the list position when coming back from a product, and always open a product at the top
+  try {
+    history.scrollRestoration = 'manual';
+    const key = 'ka_scroll:' + location.pathname + location.search;
+    const nav = performance.getEntriesByType('navigation')[0];
+    if ($('.pdp') || !nav || nav.type !== 'back_forward') { if (!location.hash) window.scrollTo(0, 0); }
+    else { const y = Number(sessionStorage.getItem(key)); if (y) { const go = () => window.scrollTo(0, y); go(); requestAnimationFrame(go); setTimeout(go, 120); } }
+    addEventListener('pagehide', () => sessionStorage.setItem(key, String(Math.round(scrollY))));
+    addEventListener('pageshow', (e) => { if (e.persisted) { const y = Number(sessionStorage.getItem(key)); if (y && !$('.pdp')) window.scrollTo(0, y); } });
+  } catch {}
 
   syncCounts(); syncFavButtons();
   if ($('[data-cart-lines][data-full]') || co) refreshCart();

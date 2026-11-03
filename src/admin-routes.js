@@ -96,7 +96,7 @@ function saveMedia(b) {
 }
 function deleteMediaIfUnused(id) {
   if (!id) return;
-  const used = get('SELECT (SELECT COUNT(*) FROM product_images WHERE media_id = ?) + (SELECT COUNT(*) FROM banners WHERE media_id = ?) AS n', id, id).n;
+  const used = get('SELECT (SELECT COUNT(*) FROM product_images WHERE media_id = ?) + (SELECT COUNT(*) FROM banners WHERE media_id = ?) + (SELECT COUNT(*) FROM categories WHERE media_id = ?) AS n', id, id, id).n;
   const isLogo = getSettings().logo_media_id === id;
   if (!used && !isLogo) run('DELETE FROM media WHERE id = ?', id);
 }
@@ -420,8 +420,9 @@ function register(r) {
   const CAT_SCHEMA = {
     name: { type: 'string', required: true, min: 2, max: 60, label: 'اسم القسم' }, icon: { type: 'string', max: 8, label: 'الأيقونة' },
     description: { type: 'string', max: 200, label: 'الوصف' }, sort_order: { type: 'int', min: 0, max: 9999, default: 0 }, active: { type: 'bool', default: true },
-    slug: { type: 'string', max: 80 }, parent_id: { type: 'int', min: 1 },
+    slug: { type: 'string', max: 80 }, parent_id: { type: 'int', min: 1 }, media_id: { type: 'int', min: 1 },
   };
+  const checkMedia = (d) => { if (d.media_id && !get('SELECT id FROM media WHERE id = ?', d.media_id)) throw new HttpError(400, 'الصورة غير موجودة'); };
   const checkParent = (d, id) => {
     if (!d.parent_id) return;
     if (d.parent_id === id) throw new HttpError(400, 'لا يمكن أن يكون القسم فرعاً من نفسه');
@@ -439,22 +440,23 @@ function register(r) {
   }));
   r.post('/api/admin/categories', A(async (req, res) => {
     const d = validate(await jsonBody(req), CAT_SCHEMA);
-    checkParent(d);
+    checkParent(d); checkMedia(d);
     if (get('SELECT id FROM categories WHERE name = ? AND parent_id IS ?', d.name, d.parent_id)) throw new HttpError(409, 'يوجد قسم بنفس الاسم');
-    const id = Number(run('INSERT INTO categories(name, slug, icon, description, sort_order, active, parent_id) VALUES(?,?,?,?,?,?,?)', d.name, uniqueSlug('categories', d.slug || d.name), d.icon || '📦', d.description, d.sort_order, d.active ? 1 : 0, d.parent_id).lastInsertRowid);
+    const id = Number(run('INSERT INTO categories(name, slug, icon, description, sort_order, active, parent_id, media_id) VALUES(?,?,?,?,?,?,?,?)', d.name, uniqueSlug('categories', d.slug || d.name), d.icon || '📦', d.description, d.sort_order, d.active ? 1 : 0, d.parent_id, d.media_id ?? null).lastInsertRowid);
     sendJson(req, res, 201, get('SELECT * FROM categories WHERE id = ?', id));
   }));
   r.put('/api/admin/categories/:id', A(async (req, res, p) => {
     const id = Number(p.id); const cur = get('SELECT * FROM categories WHERE id = ?', id);
     if (!cur) throw new HttpError(404, 'القسم غير موجود');
     const d = validate(await jsonBody(req), CAT_SCHEMA);
-    checkParent(d, id);
+    checkParent(d, id); checkMedia(d);
     if (get('SELECT id FROM categories WHERE name = ? AND parent_id IS ? AND id != ?', d.name, d.parent_id, id)) throw new HttpError(409, 'يوجد قسم بنفس الاسم');
     const slug = d.slug && slugify(d.slug) !== cur.slug ? uniqueSlug('categories', d.slug, id) : cur.slug;
     tx(() => {
-      run('UPDATE categories SET name=?, slug=?, icon=?, description=?, sort_order=?, active=?, parent_id=? WHERE id=?', d.name, slug, d.icon || '📦', d.description, d.sort_order, d.active ? 1 : 0, d.parent_id, id);
+      run('UPDATE categories SET name=?, slug=?, icon=?, description=?, sort_order=?, active=?, parent_id=?, media_id=? WHERE id=?', d.name, slug, d.icon || '📦', d.description, d.sort_order, d.active ? 1 : 0, d.parent_id, d.media_id ?? null, id);
       all('SELECT id FROM products WHERE category_id = ? OR category_id IN (SELECT id FROM categories WHERE parent_id = ?)', id, id).forEach((x) => refreshSearchText(x.id));
     });
+    if (cur.media_id && cur.media_id !== (d.media_id ?? null)) deleteMediaIfUnused(cur.media_id);
     sendJson(req, res, 200, get('SELECT * FROM categories WHERE id = ?', id));
   }));
   r.delete('/api/admin/categories/:id', A((req, res, p) => {
@@ -645,7 +647,8 @@ function register(r) {
     const str = (max) => ({ type: 'string', max });
     const d = validate(b, {
       store_name: { type: 'string', required: true, min: 2, max: 60, label: 'اسم المتجر' }, tagline: str(120), topline: str(200), announcement: str(300),
-      whatsapp: { type: 'string', max: 20, pattern: /^[0-9+\s-]*$/, patternMsg: 'رقم واتساب يقبل الأرقام فقط', label: 'واتساب' }, phone: str(30), email: str(120), address: str(200), working_hours: str(120),
+      whatsapp: { type: 'string', max: 20, pattern: /^[0-9+\s-]*$/, patternMsg: 'رقم واتساب يقبل الأرقام فقط', label: 'واتساب' },
+      whatsapp2: { type: 'string', max: 20, pattern: /^[0-9+\s-]*$/, patternMsg: 'رقم واتساب الثاني يقبل الأرقام فقط', label: 'واتساب الثاني' }, phone: str(30), email: str(120), address: str(200), working_hours: str(120),
       facebook: { type: 'string', max: 200, pattern: /^(https?:\/\/.*)?$/, patternMsg: 'رابط فيسبوك يجب أن يبدأ بـ https://' },
       instagram: { type: 'string', max: 200, pattern: /^(https?:\/\/.*)?$/, patternMsg: 'رابط إنستغرام يجب أن يبدأ بـ https://' },
       tiktok: { type: 'string', max: 200, pattern: /^(https?:\/\/.*)?$/, patternMsg: 'رابط تيك توك يجب أن يبدأ بـ https://' },
@@ -657,6 +660,7 @@ function register(r) {
       logo_media_id: { type: 'int', min: 1 },
     });
     d.whatsapp = d.whatsapp ? d.whatsapp.replace(/\D/g, '') : '';
+    d.whatsapp2 = d.whatsapp2 ? d.whatsapp2.replace(/\D/g, '') : '';
     d.shipping_zones = d.shipping_zones.map((z) => validate(z, { name: { type: 'string', required: true, max: 80, label: 'اسم المنطقة' }, fee: { type: 'number', required: true, min: 0, max: 10000, label: 'رسوم التوصيل' } }));
     if (!d.shipping_zones.length) throw new HttpError(400, 'أضف منطقة توصيل واحدة على الأقل');
     const ids = new Set(DEFAULT_SETTINGS.payment_methods.map((m) => m.id));

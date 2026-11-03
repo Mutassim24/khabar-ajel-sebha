@@ -45,6 +45,8 @@ const icons = {
   truck: raw('<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h11v10H3zM14 9h4l3 3v4h-7z"/><circle cx="7" cy="18" r="1.8"/><circle cx="17.5" cy="18" r="1.8"/></svg>'),
   wa: raw('<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20l1.3-4A8 8 0 1 1 8 18.8z"/><path d="M9 9.5c.3 1.6 1.9 3.6 3.9 4.6l1.3-1.2 2 1-.4 1.6c-3.3.3-7.5-3.6-7.8-6.9l1.6-.5 1 2z"/></svg>'),
   close: raw('<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>'),
+  moon: raw('<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/></svg>'),
+  sun: raw('<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>'),
   filter: raw('<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M7 12h10M10 18h4"/></svg>'),
 };
 
@@ -65,7 +67,7 @@ function productCard(p) {
     <div class="card-meta">${a.key === 'ask' ? '' : html`<span class="stock ${a.key}">${a.label}</span>`}${p.brand ? html`<span class="brand-tag">${p.brand}</span>` : ''}${p.has_wholesale ? html`<span class="ws" title="سعر الجملة من ${p.wholesale_min_qty} قطع">جملة ${money(p.wholesale_price)}</span>` : ''}</div>
     <div class="card-foot">
       ${a.key === 'ask'
-        ? html`<div class="price"><strong class="ask">السعر عند الطلب</strong></div><a class="add ask-btn" href="/product/${p.slug}" aria-label="اسأل عن السعر">${icons.wa}<span>اسأل</span></a>`
+        ? html`<div class="price"><strong class="ask">السعر عند الطلب</strong></div><button class="add ask-btn" type="button" data-wa-product="${p.name}" data-wa-sku="${p.sku}" data-wa-url="/product/${p.slug}" aria-label="اسأل عن السعر عبر واتساب">${icons.wa}<span>اسأل</span></button>`
         : html`<div class="price"><strong>${money(p.price)}</strong>${p.discount_pct ? html`<s>${money(p.compare_at_price)}</s>` : ''}</div>
       <button class="add" type="button" data-add="${p.id}" ${a.key === 'out' ? 'disabled' : ''} aria-label="أضف إلى السلة">${icons.cart}<span>أضف</span></button>`}
     </div>
@@ -85,8 +87,9 @@ function layout(req, { title, description, body, active = '', canonical, image, 
   const desc = description || s.seo_description;
   const url = base + (canonical || req.url.split('?')[0]);
   const cats = (req.ctx.categories || []).filter((c) => !c.parent_id);
-  const wa = String(s.whatsapp || '').replace(/\D/g, '');
-  const waLink = wa ? `https://wa.me/${wa.startsWith('0') ? '218' + wa.slice(1) : wa}` : null;
+  const waNums = [s.whatsapp, s.whatsapp2].map((n) => String(n || '').replace(/\D/g, '')).filter(Boolean).map((n) => (n.startsWith('0') ? '218' + n.slice(1) : n));
+  const wa = waNums.join(',');
+  const waLink = waNums.length ? `https://wa.me/${waNums[0]}` : null;
   const orgLd = { '@context': 'https://schema.org', '@type': 'Store', name: s.store_name, url: base, address: s.address, telephone: s.phone || undefined, currenciesAccepted: 'LYD', priceRange: '$' };
   return '<!doctype html>' + html`<html lang="ar" dir="rtl">
 <head>
@@ -96,7 +99,7 @@ function layout(req, { title, description, body, active = '', canonical, image, 
 <meta name="description" content="${desc}">
 ${noindex ? raw('<meta name="robots" content="noindex">') : ''}
 <link rel="canonical" href="${url}">
-<meta name="theme-color" content="#0f2240">
+<meta name="theme-color" content="#0f2240"><meta name="color-scheme" content="light dark">
 <meta property="og:type" content="website"><meta property="og:locale" content="ar_LY">
 <meta property="og:site_name" content="${s.store_name}"><meta property="og:title" content="${fullTitle}">
 <meta property="og:description" content="${desc}"><meta property="og:url" content="${url}">
@@ -106,6 +109,7 @@ ${image ? html`<meta property="og:image" content="${base + image}">` : ''}
 <link rel="manifest" href="/manifest.webmanifest">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800;900&display=swap">
+<script src="${asset('/js/theme.js')}"></script>
 <link rel="stylesheet" href="${asset('/css/store.css')}">
 <script type="application/ld+json">${raw(JSON.stringify(orgLd).replace(/</g, '\\u003c'))}</script>
 ${jsonld ? html`<script type="application/ld+json">${raw(JSON.stringify(jsonld).replace(/</g, '\\u003c'))}</script>` : ''}
@@ -123,6 +127,7 @@ ${s.topline ? html`<div class="topline">${s.topline}</div>` : ''}
       <div class="suggest" hidden></div>
     </form>
     <nav class="actions" aria-label="روابط سريعة">
+      <button class="act" type="button" data-theme-toggle aria-label="الوضع الليلي" title="الوضع الليلي / النهاري"><span class="i-moon">${icons.moon}</span><span class="i-sun">${icons.sun}</span></button>
       <a class="act hide-sm" href="/track">${icons.truck}<span>تتبع طلبك</span></a>
       <a class="act" href="/favorites" aria-label="المفضلة">${icons.heart}<span class="hide-sm">المفضلة</span><i class="count" data-fav-count hidden>0</i></a>
       <button class="act" type="button" data-open-cart aria-label="السلة">${icons.cart}<span class="hide-sm">السلة</span><i class="count" data-cart-count hidden>0</i></button>
@@ -162,7 +167,8 @@ ${s.announcement ? html`<div class="announce wrap">${s.announcement}</div>` : ''
   <button type="button" data-open-cart>${icons.cart}<span>السلة</span><i class="count" data-cart-count hidden>0</i></button>
   <a href="/track" class="${active === 'track' ? 'on' : ''}">${icons.truck}<span>طلبي</span></a>
 </nav>
-${waLink ? html`<a class="wa-float" href="${waLink}" target="_blank" rel="noopener" aria-label="تواصل عبر واتساب">${icons.wa}</a>` : ''}
+${waLink ? html`<a class="wa-float" href="${waLink}" target="_blank" rel="noopener" data-wa-text="السلام عليكم، عندي استفسار من موقع ${s.store_name}" aria-label="تواصل عبر واتساب">${icons.wa}</a>` : ''}
+<div class="wa-pick" data-wa-pick hidden role="dialog" aria-label="اختر رقم واتساب"><div class="wa-pick-box"><b>تواصل معنا عبر واتساب</b><p>اختر الرقم اللي تبي تراسله:</p>${waNums.map((n, i) => html`<button type="button" class="btn wa block" data-wa-num="${n}">${icons.wa} ${i ? 'الرقم الثاني' : 'الرقم الأول'} <span dir="ltr">+${n}</span></button>`)}<button type="button" class="btn ghost block" data-wa-close>إلغاء</button></div></div>
 <aside class="drawer" id="cartDrawer" aria-hidden="true" aria-label="سلة المشتريات">
   <div class="drawer-head"><h2>سلة المشتريات</h2><button type="button" data-close-cart aria-label="إغلاق">${icons.close}</button></div>
   <div class="drawer-body" data-cart-lines><div class="empty-box sm"><p>جارِ التحميل...</p></div></div>
@@ -207,7 +213,7 @@ function section(title, eyebrow, link, items, linkText = 'عرض الكل') {
 }
 
 function categoryTiles(cats) {
-  return html`<div class="cat-grid">${cats.filter((c) => !c.parent_id).map((c) => html`<a class="cat" href="/category/${c.slug}"><span class="cat-ico">${c.icon || '📦'}</span><b>${c.name}</b><small>${c.product_count ? c.product_count + ' منتج' : c.description || ''}</small></a>`)}</div>`;
+  return html`<div class="cat-grid">${cats.filter((c) => !c.parent_id).map((c) => html`<a class="cat ${c.cover_id ? 'has-img' : ''}" href="/category/${c.slug}">${c.cover_id ? html`<span class="cat-img"><img src="${img(c.cover_id, 480)}" alt="" loading="lazy" width="240" height="240"></span>` : html`<span class="cat-ico">${c.icon || '📦'}</span>`}<b>${c.name}</b><small>${c.product_count ? c.product_count + ' منتج' : c.description || ''}</small></a>`)}</div>`;
 }
 
 function home(req, d) {
@@ -253,7 +259,7 @@ function shop(req, d) {
 <nav class="crumbs" aria-label="مسار التنقل"><a href="/">الرئيسية</a><span>/</span>${d.category ? html`${d.parent ? html`<a href="/category/${d.parent.slug}">${d.parent.name}</a><span>/</span>` : html`<a href="/shop">المنتجات</a><span>/</span>`}<b>${d.category.name}</b>` : html`<b>${heading}</b>`}</nav>
 <div class="shop">
   <aside class="filters">
-    <details open class="filter-box">
+    <details class="filter-box" data-filters>
       <summary>${icons.filter} تصفية النتائج</summary>
       <form method="get" action="${base}" class="filter-form">
         ${f.q ? html`<input type="hidden" name="q" value="${f.q}">` : ''}
@@ -293,7 +299,7 @@ function shop(req, d) {
     </div>
     ${d.subs && d.subs.length ? html`<nav class="subcats" aria-label="أنواع ${d.parent ? d.parent.name : d.category.name}">
       <a href="${qs('/category/' + (d.parent || d.category).slug, keep)}" class="${!d.parent ? 'on' : ''}">الكل <small>${(d.parent || d.category).product_count}</small></a>
-      ${d.subs.map((c) => html`<a href="${qs('/category/' + c.slug, keep)}" class="${d.category.id === c.id ? 'on' : ''}">${c.name} <small>${c.product_count}</small></a>`)}
+      ${d.subs.map((c) => html`<a href="${qs('/category/' + c.slug, keep)}" class="${d.category.id === c.id ? 'on' : ''}">${c.cover_id ? html`<img src="${img(c.cover_id, 160)}" alt="" loading="lazy" width="28" height="28">` : ''}${c.name} <small>${c.product_count}</small></a>`)}
     </nav>` : ''}
     ${d.category && d.category.name === 'وصلة (خيط شحن)' ? html`<nav class="subcats plugs" aria-label="نوع المدخل"><span>نوع المدخل:</span>
       ${[['', 'الكل'], ['تايب سي', 'Type-C'], ['ايفون', 'ايفون (لايتننق)'], ['مايكرو', 'مايكرو (عادي)']].map(([q, l]) => html`<a href="${qs('/category/' + d.category.slug, { ...keep, q })}" class="${(f.q || '') === q ? 'on' : ''}">${l}</a>`)}
@@ -353,8 +359,11 @@ function productPage(req, p, related) {
       <li><span>رقم المنتج SKU</span><b dir="ltr">${p.sku}</b></li>
       ${p.brand ? html`<li><span>العلامة التجارية</span><b>${p.brand}</b></li>` : ''}
     </ul>
-    ${a.key === 'ask' ? html`<div class="buy-extra">
-      ${s.whatsapp ? html`<button class="btn wa block lg" type="button" data-wa-text="${`السلام عليكم، أبي أعرف سعر وتوفر: ${p.name} (${p.sku})\n${base}/product/${p.slug}`}">${icons.wa} اسأل عن السعر عبر واتساب</button>` : html`<a class="btn primary block lg" href="/page/contact">تواصل معنا لمعرفة السعر</a>`}
+    ${a.key === 'ask' ? html`<div class="buy ask" data-ask>
+      <span class="qty-label">الكمية</span><div class="qty" role="group" aria-label="الكمية"><button type="button" data-step="1" aria-label="زيادة">+</button><input type="number" value="1" min="1" max="999" inputmode="numeric" aria-label="الكمية" data-qty><button type="button" data-step="-1" aria-label="إنقاص">−</button></div>
+    </div>
+    <div class="buy-extra">
+      ${s.whatsapp ? html`<button class="btn wa block lg" type="button" data-wa-product="${p.name}" data-wa-sku="${p.sku}" data-wa-url="/product/${p.slug}" data-wa-ask>${icons.wa} اطلب أو اسأل عن السعر عبر واتساب</button>` : html`<a class="btn primary block lg" href="/page/contact">تواصل معنا لمعرفة السعر</a>`}
       <button class="btn ghost block fav-lg" type="button" data-fav="${p.id}" aria-label="أضف إلى المفضلة" aria-pressed="false">${icons.heart} أضف إلى المفضلة</button>
     </div>` : html`<div class="buy" data-product="${p.id}" data-max="${p.stock}" data-retail="${p.price}" data-ws="${p.has_wholesale ? p.wholesale_price : ''}" data-ws-min="${p.wholesale_min_qty}">
       <div class="qty" role="group" aria-label="الكمية"><button type="button" data-step="1" aria-label="زيادة">+</button><input type="number" value="1" min="1" max="${Math.max(1, p.stock)}" inputmode="numeric" aria-label="الكمية" data-qty><button type="button" data-step="-1" aria-label="إنقاص">−</button></div>
@@ -364,7 +373,7 @@ function productPage(req, p, related) {
     <p class="unit-note" data-unit-note hidden></p>
     <div class="buy-extra">
       ${a.key !== 'out' ? html`<button class="btn dark block" type="button" data-buy-now="${p.id}">اشترِ الآن</button>` : ''}
-      ${s.whatsapp ? html`<button class="btn wa block" type="button" data-wa-text="${`السلام عليكم، أستفسر عن المنتج: ${p.name} (SKU: ${p.sku})\n${base}/product/${p.slug}`}">${icons.wa} اسأل عن المنتج عبر واتساب</button>` : ''}
+      ${s.whatsapp ? html`<button class="btn wa block" type="button" data-wa-product="${p.name}" data-wa-sku="${p.sku}" data-wa-url="/product/${p.slug}">${icons.wa} اطلب أو اسأل عبر واتساب</button>` : ''}
     </div>`}
     <ul class="assure"><li>🚚 توصيل لجميع المدن الليبية</li><li>💵 الدفع عند الاستلام</li><li>🔁 استبدال للعيوب المصنعية</li></ul>
   </div>
@@ -472,7 +481,7 @@ function orderSummary(o) {
 function orderSuccess(req, o) {
   const body = html`<div class="wrap narrow">
 <div class="success-hero"><span class="check">✓</span><h1>تم استلام طلبك بنجاح</h1><p>شكراً لك ${o.customer_name}! سنتواصل معك على الرقم <b dir="ltr">${o.phone}</b> لتأكيد الطلب.</p></div>
-${o.whatsapp_url ? html`<div class="panel wa-cta"><p><b>لتسريع التأكيد</b> أرسل تفاصيل الطلب إلينا عبر واتساب بضغطة واحدة.</p><a class="btn wa lg" href="${o.whatsapp_url}" target="_blank" rel="noopener">${icons.wa} إرسال الطلب عبر واتساب</a></div>` : ''}
+${o.whatsapp_url ? html`<div class="panel wa-cta"><p><b>لتسريع التأكيد</b> أرسل تفاصيل الطلب إلينا عبر واتساب بضغطة واحدة.</p><a class="btn wa lg" href="${o.whatsapp_url}" target="_blank" rel="noopener" data-wa-text="${o.whatsapp_text}">${icons.wa} إرسال الطلب عبر واتساب</a></div>` : ''}
 ${orderSummary(o)}
 <div class="center gap"><a class="btn ghost" href="/track?number=${encodeURIComponent(o.number)}">تتبع الطلب</a><a class="btn primary" href="/shop">متابعة التسوق</a></div>
 </div>`;

@@ -21,7 +21,8 @@
   async function api(method, url, body) {
     const opt = { method, headers: { 'X-Requested-With': 'fetch' }, credentials: 'same-origin' };
     if (body !== undefined) { opt.headers['Content-Type'] = 'application/json'; opt.body = JSON.stringify(body); }
-    const res = await fetch(url, opt);
+    let res;
+    try { res = await fetch(url, opt); } catch { throw new Error('تعذّر الاتصال بالخادم — تأكد من الإنترنت وحاول مرة أخرى'); }
     let data = null; try { data = await res.json(); } catch {}
     if (res.status === 401 && !url.endsWith('/login')) { state.me = null; renderLogin(); throw new Error('انتهت الجلسة، سجّل الدخول مجدداً'); }
     if (!res.ok) { const e = new Error((data && data.error) || `خطأ ${res.status}`); e.data = data; throw e; }
@@ -95,7 +96,7 @@
         <div class="brand"><span class="mark">خ</span><div><b>${state.me.store_name}</b><small>لوحة التحكم</small></div></div>
         <nav class="nav">${NAV.filter((n) => !n[4] || state.me.role === n[4]).map((n) => n[0] === 'sep' ? h`<div class="sep">${n[2]}</div>`
           : h`<a href="#/${n[0]}" data-nav="${n[0]}"><span class="ic">${n[1]}</span>${n[2]}${n[3] ? h`<span class="n" data-badge="${n[3]}" hidden></span>` : ''}</a>`)}</nav>
-        <div class="side-foot"><b>${state.me.name}</b><span class="muted small">${state.me.role === 'owner' ? 'مالك المتجر' : 'موظف'} · ${state.me.email}</span><div style="margin-top:6px"><a href="/" target="_blank">عرض المتجر ↗</a><a href="#" data-logout>تسجيل الخروج</a></div></div>
+        <div class="side-foot"><b>${state.me.name}</b><span class="muted small">${state.me.role === 'owner' ? 'مالك المتجر' : 'موظف'} · ${state.me.email}</span><div style="margin-top:6px"><a href="/" target="_blank">عرض المتجر ↗</a><a href="#" data-logout>تسجيل الخروج</a></div><button type="button" class="btn sm theme-btn" data-theme-toggle>🌙 / ☀️ الوضع الليلي</button></div>
       </aside>
       <div>
         <div class="topbar"><button type="button" data-menu aria-label="القائمة">☰</button><b>${state.me.store_name}</b><a href="/" target="_blank" style="color:#fff">المتجر ↗</a></div>
@@ -104,6 +105,7 @@
     </div>`);
     $('[data-logout]').onclick = async (e) => { e.preventDefault(); await api('POST', '/api/admin/logout').catch(() => {}); state.me = null; renderLogin(); };
     $('[data-menu]').onclick = () => $('#side').classList.toggle('open');
+    $('[data-theme-toggle]').onclick = () => { const d = document.documentElement.getAttribute('data-theme') !== 'dark'; document.documentElement.setAttribute('data-theme', d ? 'dark' : 'light'); try { localStorage.setItem('ka_admin_theme', d ? 'dark' : 'light'); } catch {} };
   }
   function setBadges(d) {
     if (d.new_orders !== undefined) state.badges.orders = d.new_orders;
@@ -133,6 +135,7 @@
   let view;
   async function route() {
     if (!state.me) return;
+    if (!$('#modal').hidden && !route.keepModal) closeModal();
     const parts = (location.hash.replace(/^#\/?/, '') || 'dashboard').split('?')[0].split('/');
     const qs = new URLSearchParams(location.hash.split('?')[1] || '');
     const name = parts[0];
@@ -297,8 +300,9 @@
           </div></div>
           <div class="card"><h2>الصور <span class="small muted">أول صورة هي الرئيسية · حتى 12 صورة</span></h2>
             ${isNew ? h`<p class="muted small">احفظ المنتج أولاً ثم أضف الصور.</p>` : h`<div class="imgs" data-imgs>
-              ${p.images.map((m, i) => h`<div class="im"><img src="${img(m, 300)}" alt="">${i === 0 ? h`<span class="first">رئيسية</span>` : ''}<div class="ops"><button type="button" data-img-first="${m}" title="اجعلها رئيسية">★</button><button type="button" data-img-left="${m}" title="تحريك">⇠</button><button type="button" data-img-del="${m}" title="حذف">🗑</button></div></div>`)}
-              <label class="drop" data-drop>📷<br>اسحب الصور هنا أو اضغط للاختيار<input type="file" accept="image/*" multiple hidden data-upload></label>
+              ${p.images.map((m, i) => h`<div class="im"><img src="${img(m, 300)}" alt="">${i === 0 ? h`<span class="first">رئيسية</span>` : ''}<div class="ops"><button type="button" data-img-first="${m}" title="اجعلها الصورة الرئيسية">★ رئيسية</button><button type="button" data-img-left="${m}" title="تحريك للأمام">⇠</button><button type="button" data-img-rep="${m}" title="استبدال بصورة جديدة">🔄</button><button type="button" data-img-del="${m}" title="حذف الصورة">🗑</button></div></div>`)}
+              <label class="drop" data-drop>📷<br>إضافة صور<br><small>اضغط للاختيار أو اسحب الصور هنا</small><input type="file" accept="image/*" multiple hidden data-upload></label>
+              <input type="file" accept="image/*" hidden data-replace-file>
             </div><p class="small muted" data-up-status></p>`}
           </div>
         </div>
@@ -369,8 +373,23 @@
     drop.ondragover = (e) => { e.preventDefault(); drop.classList.add('over'); };
     drop.ondragleave = () => drop.classList.remove('over');
     drop.ondrop = (e) => { e.preventDefault(); drop.classList.remove('over'); upload([...e.dataTransfer.files].filter((f) => f.type.startsWith('image/'))); };
+    let replacing = null;
+    $('[data-replace-file]', v).onchange = async (e) => {
+      const file = e.target.files[0]; if (!file || !replacing) return;
+      status.textContent = 'جارِ استبدال الصورة...';
+      try {
+        const r = await api('POST', `/api/admin/products/${p.id}/images`, await encodeImage(file));
+        const newId = r.images.find((x) => !p.images.includes(x));
+        await api('DELETE', `/api/admin/products/${p.id}/images/${replacing}`);
+        const order = p.images.map((x) => (x === replacing ? newId : x));
+        await api('PUT', `/api/admin/products/${p.id}/images`, { order });
+        toast('تم استبدال الصورة ✓');
+      } catch (ex) { fail(ex); }
+      status.textContent = ''; route();
+    };
     $('[data-imgs]', v).onclick = async (e) => {
       const b = e.target.closest('button'); if (!b) return;
+      if (b.dataset.imgRep) { replacing = Number(b.dataset.imgRep); $('[data-replace-file]', v).click(); return; }
       const order = [...p.images];
       try {
         if (b.dataset.imgDel) { if (!(await confirmBox('حذف هذه الصورة؟', 'حذف'))) return; await api('DELETE', `/api/admin/products/${p.id}/images/${b.dataset.imgDel}`); }
@@ -389,20 +408,23 @@
     const cats = await loadCats(true);
     v.innerHTML = String(h`${head('الأقسام', `${cats.length} قسم`, h`<button class="btn primary" data-new>+ قسم جديد</button>`)}
       <div class="tw"><table class="t"><thead><tr><th>الترتيب</th><th>القسم</th><th>الوصف</th><th>المنتجات</th><th>الحالة</th><th></th></tr></thead><tbody>
-      ${cats.map((c) => h`<tr style="${c.parent_id ? '' : 'background:#f7f9fc'}"><td>${c.sort_order}</td><td>${c.parent_id ? h`<span style="padding-inline-start:22px">└ ${c.name}</span>` : h`<b>${c.icon} ${c.name}</b>`}<br><small class="muted ltr">/category/${c.slug}</small></td><td class="small">${c.description || '—'}</td><td><a href="#/products?category=${c.id}">${c.total_products}</a></td><td><span class="pill ${c.active ? 'p-on' : 'p-off'}">${c.active ? 'ظاهر' : 'مخفي'}</span></td>
+      ${cats.map((c) => h`<tr style="${c.parent_id ? '' : 'background:#f7f9fc'}"><td>${c.sort_order}</td><td>${c.cover_id ? h`<img class="thumb" src="${img(c.cover_id, 160)}" alt="" style="vertical-align:middle;margin-inline-end:8px;${c.parent_id ? 'margin-inline-start:22px' : ''}">` : ''}${c.parent_id ? h`<span style="${c.cover_id ? '' : 'padding-inline-start:22px'}">└ ${c.name}</span>` : h`<b>${c.icon} ${c.name}</b>`}<br><small class="muted ltr">/category/${c.slug}</small></td><td class="small">${c.description || '—'}</td><td><a href="#/products?category=${c.id}">${c.total_products}</a></td><td><span class="pill ${c.active ? 'p-on' : 'p-off'}">${c.active ? 'ظاهر' : 'مخفي'}</span></td>
         <td class="nowrap"><button class="btn sm" data-edit="${c.id}">تعديل</button> <button class="btn sm danger" data-del="${c.id}">حذف</button></td></tr>`)}
       </tbody></table></div>`);
     const edit = (c = { active: 1, icon: '📦', sort_order: 0 }) => modal(c.id ? 'تعديل القسم' : 'قسم جديد', h`<form class="form" novalidate><div class="fg">
       <label class="l">اسم القسم *<input name="name" required value="${c.name || ''}"></label>
       <label class="l">يتبع القسم الرئيسي<select name="parent_id"><option value="">— قسم رئيسي —</option>${cats.filter((x) => !x.parent_id && x.id !== c.id).map((x) => h`<option value="${x.id}" ${x.id === c.parent_id ? 'selected' : ''}>${x.icon} ${x.name}</option>`)}</select><small>اختر قسماً رئيسياً لجعل هذا نوعاً فرعياً</small></label>
       <label class="l">أيقونة (إيموجي)<input name="icon" maxlength="8" value="${c.icon || ''}"></label>
+      <div class="l full">صورة القسم<input type="hidden" name="media_id" value="${c.media_id || ''}"><div class="cat-img-row"><span data-cat-prev>${c.media_id ? h`<img src="${img(c.media_id, 160)}" alt="">` : c.cover_id ? h`<img src="${img(c.cover_id, 160)}" alt="" style="opacity:.55">` : '📦'}</span><label class="btn sm">📷 رفع صورة<input type="file" accept="image/*" hidden data-cat-file></label>${c.media_id ? h`<button type="button" class="btn sm" data-cat-rm>إزالة</button>` : ''}</div><small>اتركها فارغة لعرض صورة أول منتج في القسم تلقائياً</small></div>
       <label class="l full">وصف قصير<input name="description" maxlength="200" value="${c.description || ''}"></label>
       <label class="l">ترتيب الظهور<input name="sort_order" type="number" min="0" value="${c.sort_order ?? 0}"></label>
       ${c.id ? h`<label class="l">الرابط<input name="slug" dir="ltr" value="${c.slug}"></label>` : ''}
       <label class="sw full"><input type="checkbox" name="active" ${c.active ? 'checked' : ''}> ظاهر في المتجر</label></div>
       <div class="tools"><button class="btn primary">حفظ</button><button type="button" class="btn" data-close-modal>إلغاء</button></div></form>`, (b) => {
       const f = $('form', b); f.name.focus();
-      f.onsubmit = async (e) => { e.preventDefault(); const dd = formData(f); dd.parent_id = dd.parent_id ? Number(dd.parent_id) : null; try { await api(c.id ? 'PUT' : 'POST', `/api/admin/categories${c.id ? '/' + c.id : ''}`, dd); closeModal(); toast('تم الحفظ ✓'); categoriesCache = null; route(); } catch (ex) { showErr(f, ex.message); } };
+      $('[data-cat-file]', b).onchange = async (e) => { const file = e.target.files[0]; if (!file) return; try { const r = await api('POST', '/api/admin/media', await encodeImage(file)); f.media_id.value = r.id; $('[data-cat-prev]', b).innerHTML = `<img src="${img(r.id, 160)}" alt="">`; } catch (ex) { fail(ex); } };
+      const rm = $('[data-cat-rm]', b); if (rm) rm.onclick = () => { f.media_id.value = ''; $('[data-cat-prev]', b).textContent = '📦'; rm.remove(); };
+      f.onsubmit = async (e) => { e.preventDefault(); const dd = formData(f); dd.parent_id = dd.parent_id ? Number(dd.parent_id) : null; dd.media_id = dd.media_id ? Number(dd.media_id) : null; try { await api(c.id ? 'PUT' : 'POST', `/api/admin/categories${c.id ? '/' + c.id : ''}`, dd); closeModal(); toast('تم الحفظ ✓'); categoriesCache = null; route(); } catch (ex) { showErr(f, ex.message); } };
     });
     $('[data-new]', v).onclick = () => edit();
     v.onclick = async (e) => {
@@ -662,7 +684,8 @@
             <label class="l full">تنبيه مهم في أعلى الصفحات (اختياري)<input name="announcement" value="${s.announcement || ''}" placeholder="مثال: المحل مغلق يوم الجمعة"></label>
           </div></div>
           <div class="card"><h2>التواصل</h2><div class="fg">
-            <label class="l">رقم واتساب الطلبات *<input name="whatsapp" dir="ltr" value="${s.whatsapp}" placeholder="0912345678"><small>تُرسل إليه الطلبات واستفسارات العملاء</small></label>
+            <label class="l">رقم واتساب الأول *<input name="whatsapp" dir="ltr" value="${s.whatsapp}" placeholder="218926201329"><small>تُرسل إليه الطلبات واستفسارات العملاء</small></label>
+            <label class="l">رقم واتساب الثاني<input name="whatsapp2" dir="ltr" value="${s.whatsapp2 || ''}" placeholder="218928146639"><small>اختياري — لو موجود، الزبون يختار أي رقم يراسل</small></label>
             <label class="l">هاتف المحل<input name="phone" dir="ltr" value="${s.phone}"></label>
             <label class="l">البريد الإلكتروني<input name="email" dir="ltr" value="${s.email}"></label>
             <label class="l">ساعات العمل<input name="working_hours" value="${s.working_hours}"></label>

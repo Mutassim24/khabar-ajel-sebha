@@ -126,6 +126,7 @@ const DEFAULT_SETTINGS = {
   tagline: 'إكسسوارات الهواتف المحمولة وقطع الغيار',
   topline: '🚚 توصيل داخل سبها وإلى جميع المدن الليبية · الدفع عند الاستلام · أسعار جملة للتجار',
   whatsapp: '218926201329',
+  whatsapp2: '218928146639', // second WhatsApp number — customers choose which one to message
   phone: '0926201329',
   email: '',
   address: 'سبها، ليبيا',
@@ -188,6 +189,9 @@ if (!all('PRAGMA table_info(categories)').some((c) => c.name === 'parent_id')) {
   db.exec('ALTER TABLE categories ADD COLUMN parent_id INTEGER REFERENCES categories(id) ON DELETE CASCADE');
 }
 db.exec('CREATE INDEX IF NOT EXISTS idx_categories_parent ON categories(parent_id)');
+if (!all('PRAGMA table_info(categories)').some((c) => c.name === 'media_id')) {
+  db.exec('ALTER TABLE categories ADD COLUMN media_id INTEGER REFERENCES media(id) ON DELETE SET NULL');
+}
 const SEARCH_INDEX_VERSION = '3';
 
 // ---------- product search text ----------
@@ -351,7 +355,29 @@ function seed() {
       seedCatalog(catalog, done);
       run("INSERT INTO settings(key, value) VALUES('_catalog_seeded', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", JSON.stringify(catalog.products.length));
     }
+    refreshCatalogPhotos(catalog);
   }
+}
+/** Replace re-processed catalog photos in an existing store — only photos the admin hasn't changed (same original file size). */
+function refreshCatalogPhotos(catalog) {
+  const VER = '2';
+  const r = get("SELECT value FROM settings WHERE key = '_catalog_photos'");
+  if (r && JSON.parse(r.value) === VER) return;
+  let replaced = {};
+  try { replaced = JSON.parse(fs.readFileSync(path.join(SEED_DIR, 'images-replaced.json'), 'utf8')); } catch {}
+  const imgDir = path.join(SEED_DIR, 'images');
+  tx(() => catalog.products.forEach((p, i) => {
+    const prod = get('SELECT id FROM products WHERE sku = ?', 'KA-' + String(2001 + i)); if (!prod) return;
+    const media = all('SELECT m.id, m.size FROM product_images pi JOIN media m ON m.id = pi.media_id WHERE pi.product_id = ? ORDER BY pi.sort_order, pi.id', prod.id);
+    (p.images || []).forEach((file, k) => {
+      const oldSize = replaced[file]; const m = media[k];
+      if (!oldSize || !m || m.size !== oldSize) return;
+      const full = path.join(imgDir, file); if (!fs.existsSync(full)) return;
+      const data = fs.readFileSync(full); const tf = full.replace(/\.webp$/, '.thumb.webp');
+      run('UPDATE media SET data = ?, thumb = ?, size = ? WHERE id = ?', data, fs.existsSync(tf) ? fs.readFileSync(tf) : null, data.length, m.id);
+    });
+  }));
+  run("INSERT INTO settings(key, value) VALUES('_catalog_photos', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", JSON.stringify(VER));
 }
 function seedSampleProducts() {
   tx(() => {

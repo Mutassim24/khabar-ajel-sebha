@@ -89,7 +89,10 @@ function relatedProducts(p, n = 4) {
 
 /** All categories (parents and subcategories) with active product counts; a parent's count includes its children. */
 function categoriesWithCounts(includeInactive = false) {
-  const rows = all(`SELECT c.*, (SELECT COUNT(*) FROM products p WHERE p.active = 1 AND (p.category_id = c.id OR p.category_id IN (SELECT id FROM categories WHERE parent_id = c.id))) AS product_count
+  const rows = all(`SELECT c.*, (SELECT COUNT(*) FROM products p WHERE p.active = 1 AND (p.category_id = c.id OR p.category_id IN (SELECT id FROM categories WHERE parent_id = c.id))) AS product_count,
+    COALESCE(c.media_id, (SELECT pi.media_id FROM products p JOIN product_images pi ON pi.product_id = p.id
+      WHERE p.active = 1 AND (p.category_id = c.id OR p.category_id IN (SELECT id FROM categories WHERE parent_id = c.id))
+      ORDER BY p.featured DESC, p.sold_count DESC, p.id, pi.sort_order, pi.id LIMIT 1)) AS cover_id
     FROM categories c ${includeInactive ? '' : 'WHERE c.active = 1 AND (c.parent_id IS NULL OR (SELECT active FROM categories WHERE id = c.parent_id) = 1)'} ORDER BY c.sort_order, c.id`);
   for (const r of rows) r.children = rows.filter((x) => x.parent_id === r.id);
   return rows;

@@ -112,7 +112,18 @@ const q = (s) => encodeURIComponent(s);
   await t('store WhatsApp number is set: ask-price button opens wa.me/218926201329', async () => {
     const p = (await j('/api/products?per=1')).items[0];
     const html = await (await fetch(`${BASE}/product/${q(p.slug)}`)).text();
-    assert.match(html, /data-whatsapp="218926201329"/); assert.match(html, /اسأل عن السعر عبر واتساب/);
+    assert.match(html, /data-whatsapp="218926201329,218928146639"/); assert.match(html, /عبر واتساب/);
+    assert.match(html, /data-wa-num="218928146639"/, 'second number in the chooser'); assert.match(html, /data-ask/, 'quantity for price-on-request');
+  });
+  await t('categories show real product photos; theme toggle present', async () => {
+    const html = await (await fetch(`${BASE}/categories`)).text();
+    assert.ok((html.match(/class="cat-img"/g) || []).length >= 8); assert.match(html, /data-theme-toggle/);
+    const sub = await (await fetch(`${BASE}/category/${q('الكفرات')}`)).text(); assert.match(sub, /class="subcats"[\s\S]*?<img/);
+  });
+  await t('re-processed photos replace untouched catalog photos in an existing store', async () => {
+    const { execFileSync } = require('child_process');
+    const out = execFileSync(process.execPath, ['-e', `process.env.DATA_DIR=${JSON.stringify(DATA)};const d=require(${JSON.stringify(path.join(__dirname, '..', 'src', 'db.js'))});const p=d.get("SELECT m.id,m.size FROM products p JOIN product_images pi ON pi.product_id=p.id JOIN media m ON m.id=pi.media_id WHERE p.sku='KA-2020'");const old=require(${JSON.stringify(path.join(__dirname, '..', 'seed', 'images-replaced.json'))})['p20-1.webp'];d.run("UPDATE media SET size=? WHERE id=?",old,p.id);d.run("DELETE FROM settings WHERE key='_catalog_photos'");d.seed();console.log(d.get("SELECT size FROM media WHERE id=?",p.id).size!==old)`]).toString().trim();
+    assert.equal(out, 'true');
   });
   await t('category page shows subcategory chips', async () => {
     const html = await (await fetch(`${BASE}/category/${q('الشواحن')}`)).text();
