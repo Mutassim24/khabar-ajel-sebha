@@ -482,6 +482,7 @@ function orderSuccess(req, o) {
   const body = html`<div class="wrap narrow">
 <div class="success-hero"><span class="check">✓</span><h1>تم استلام طلبك بنجاح</h1><p>شكراً لك ${o.customer_name}! سنتواصل معك على الرقم <b dir="ltr">${o.phone}</b> لتأكيد الطلب.</p></div>
 ${o.whatsapp_url ? html`<div class="panel wa-cta"><p><b>لتسريع التأكيد</b> أرسل تفاصيل الطلب إلينا عبر واتساب بضغطة واحدة.</p><a class="btn wa lg" href="${o.whatsapp_url}" target="_blank" rel="noopener" data-wa-text="${o.whatsapp_text}">${icons.wa} إرسال الطلب عبر واتساب</a></div>` : ''}
+<p class="center"><a class="btn ghost" href="/invoice/${o.number}?t=${o.token}">🧾 عرض الفاتورة وطباعتها</a></p>
 ${orderSummary(o)}
 <div class="center gap"><a class="btn ghost" href="/track?number=${encodeURIComponent(o.number)}">تتبع الطلب</a><a class="btn primary" href="/shop">متابعة التسوق</a></div>
 </div>`;

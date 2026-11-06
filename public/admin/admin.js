@@ -85,7 +85,7 @@
   const state = { me: null, badges: {} };
   const app = $('#app');
   const NAV = [
-    ['dashboard', '📊', 'الرئيسية'], ['orders', '🧾', 'الطلبات', 'orders'], ['products', '📦', 'المنتجات'], ['categories', '🗂️', 'الأقسام'],
+    ['dashboard', '📊', 'الرئيسية'], ['orders', '🧾', 'الطلبات', 'orders'], ['products', '📦', 'المنتجات'], ['prices', '💲', 'إدخال الأسعار'], ['categories', '🗂️', 'الأقسام'],
     ['inventory', '📋', 'حركة المخزون'], ['customers', '👥', 'العملاء'], ['coupons', '🎟️', 'كوبونات الخصم'], ['reports', '📈', 'التقارير والأرباح'],
     ['sep', '', 'المحتوى'], ['banners', '🖼️', 'البانرات'], ['pages', '📄', 'الصفحات'], ['messages', '✉️', 'الرسائل', 'messages'],
     ['sep', '', 'الإدارة'], ['settings', '⚙️', 'إعدادات المتجر', null, 'owner'], ['users', '🔐', 'المستخدمون', null, 'owner'], ['account', '👤', 'حسابي'],
@@ -136,6 +136,7 @@
   async function route() {
     if (!state.me) return;
     if (!$('#modal').hidden && !route.keepModal) closeModal();
+    window.onbeforeunload = null;
     const parts = (location.hash.replace(/^#\/?/, '') || 'dashboard').split('?')[0].split('/');
     const qs = new URLSearchParams(location.hash.split('?')[1] || '');
     const name = parts[0];
@@ -444,6 +445,48 @@
   };
 
   // ---------- orders ----------
+  // ---------- quick price entry: every product on one page ----------
+  routes.prices = async (v, parts, qs) => {
+    const cats = await loadCats();
+    const f = { q: qs.get('q') || '', category: qs.get('category') || '', status: qs.get('status') || 'noprice' };
+    const d = await api('GET', '/api/admin/products?' + new URLSearchParams({ ...f, sort: 'name', per: 500 }));
+    const F = [['price', 'سعر القطاعي *'], ['wholesale_price', 'سعر الجملة'], ['wholesale_min_qty', 'الجملة من كمية'], ['cost_price', 'التكلفة'], ['stock', 'الكمية']];
+    v.innerHTML = String(h`${head('إدخال الأسعار', `${num(d.total)} منتج — عدّل الأسعار ثم اضغط «حفظ الكل»`, h`<button class="btn primary" data-save-all disabled>💾 حفظ الكل</button>`)}
+      <form class="filters" data-filter>
+        <input class="f grow" name="q" placeholder="بحث بالاسم أو SKU..." value="${f.q}">
+        <select class="f" name="category"><option value="">كل الأقسام</option>${catOptions(cats, f.category)}</select>
+        <select class="f" name="status">${[['noprice', 'بدون سعر فقط'], ['', 'كل المنتجات']].map(([k, l]) => h`<option value="${k}" ${k === f.status ? 'selected' : ''}>${l}</option>`)}</select>
+        <button class="btn">عرض</button>
+      </form>
+      <p class="small muted">المنتج اللي سعره 0 يظهر للزبون «السعر عند الطلب». الأسعار بالدينار الليبي، وتقدر تكتب كسور مثل 12.5 (اثنا عشر ديناراً وخمسمائة درهم).</p>
+      ${d.items.length ? h`<div class="price-list">${d.items.map((p) => h`<div class="pr card" data-id="${p.id}">
+        <a class="pname" href="#/products/${p.id}">${p.image_id ? h`<img class="thumb" src="${img(p.image_id, 160)}" alt="">` : h`<span class="thumb">📦</span>`}<span><b>${p.name}</b><small class="ltr">${p.sku}</small></span></a>
+        <div class="pr-f">${F.map(([k, l]) => h`<label>${l}<input type="number" min="${k === 'wholesale_min_qty' ? 1 : 0}" step="${k === 'stock' || k === 'wholesale_min_qty' ? 1 : 0.001}" inputmode="decimal" data-k="${k}" data-orig="${p[k] ?? ''}" value="${p[k] ?? ''}" placeholder="${k === 'wholesale_price' ? '—' : ''}"></label>`)}</div>
+      </div>`)}</div><div class="savebar"><button class="btn primary" data-save-all disabled>💾 حفظ الكل</button><span data-dirty class="small muted"></span></div>`
+    : h`<div class="card empty">${f.status === 'noprice' ? '✓ كل المنتجات عليها أسعار.' : 'لا توجد منتجات مطابقة.'}</div>`}`);
+    $('[data-filter]', v).onsubmit = (e) => { e.preventDefault(); setQs('prices', formData(e.target)); };
+    $$('[data-filter] select', v).forEach((s) => (s.onchange = () => setQs('prices', formData(s.form))));
+    const dirtyRows = () => $$('.pr', v).filter((r) => $$('[data-k]', r).some((i) => i.value !== i.dataset.orig));
+    const refresh = () => { const n = dirtyRows().length; $$('[data-save-all]', v).forEach((b) => { b.disabled = !n; b.textContent = n ? `💾 حفظ الكل (${n})` : '💾 حفظ الكل'; }); const dd = $('[data-dirty]', v); if (dd) dd.textContent = n ? `${n} منتج تم تعديله ولم يُحفظ بعد` : ''; };
+    v.addEventListener('input', (e) => { const i = e.target.closest('[data-k]'); if (!i) return; i.classList.toggle('chg', i.value !== i.dataset.orig); i.classList.remove('bad'); refresh(); });
+    window.onbeforeunload = () => (dirtyRows().length ? true : undefined);
+    v.addEventListener('click', async (e) => {
+      if (!e.target.closest('[data-save-all]')) return;
+      const rows = dirtyRows(); let ok = 0, bad = 0;
+      $$('[data-save-all]', v).forEach((b) => (b.disabled = true));
+      for (const r of rows) {
+        const body = {};
+        for (const i of $$('[data-k]', r)) {
+          if (i.value === i.dataset.orig) continue;
+          if (i.value === '' && i.dataset.k === 'wholesale_min_qty') { i.value = i.dataset.orig; continue; }
+          body[i.dataset.k] = i.value === '' ? (i.dataset.k === 'wholesale_price' ? null : 0) : Number(i.value);
+        }
+        try { await api('PATCH', `/api/admin/products/${r.dataset.id}`, body); ok++; $$('[data-k]', r).forEach((i) => { i.dataset.orig = i.value; i.classList.remove('chg'); }); r.classList.add('saved'); }
+        catch (ex) { bad++; $$('[data-k]', r).forEach((i) => i.value !== i.dataset.orig && i.classList.add('bad')); r.title = ex.message; toast(`${$('b', r).textContent}: ${ex.message}`, true); }
+      }
+      refresh(); if (ok) toast(`تم حفظ ${ok} منتج ✓${bad ? ` — ${bad} فيها خطأ (باللون الأحمر)` : ''}`, !!bad);
+    });
+  };
   routes.orders = async (v, parts, qs) => {
     if (parts[0]) return orderDetail(v, parts[0]);
     const f = { status: qs.get('status') || '', q: qs.get('q') || '', from: qs.get('from') || '', to: qs.get('to') || '', page: qs.get('page') || '1' };
@@ -468,7 +511,7 @@
   const NEXT_LABEL = { processing: '⏳ قيد التجهيز', shipped: '🚚 تم الشحن', completed: '✅ مكتمل', cancelled: '❌ إلغاء الطلب', new: '↩ إعادة كجديد' };
   async function orderDetail(v, id) {
     const o = await api('GET', `/api/admin/orders/${id}`);
-    v.innerHTML = String(h`${head(h`طلب <span class="ltr">${o.number}</span>`, h`${pill(o.status)} · ${dt(o.created_at)}`, h`<a class="btn" href="#/orders">← الطلبات</a><button class="btn" data-print>🖨 طباعة الفاتورة</button>`)}
+    v.innerHTML = String(h`${head(h`طلب <span class="ltr">${o.number}</span>`, h`${pill(o.status)} · ${dt(o.created_at)}`, h`<a class="btn" href="#/orders">← الطلبات</a><a class="btn primary" href="/invoice/${o.number}" target="_blank" rel="noopener">🧾 الفاتورة</a><button class="btn" data-print>🖨 طباعة مختصرة</button>`)}
       <div class="split">
         <div class="grid">
           <div class="card no-print"><h2>تغيير الحالة</h2>
@@ -698,6 +741,17 @@
             <button type="button" class="btn sm" data-add-zone>+ إضافة منطقة</button>
             <label class="l" style="margin-top:12px">توصيل مجاني للطلبات فوق (د.ل)<input name="free_shipping_over" type="number" min="0" value="${s.free_shipping_over || 0}"><small>0 = معطل</small></label></div>
           <div class="card"><h2>طرق الدفع</h2><div class="list-rows" data-pms>${(s.payment_methods || []).map(pmRow)}</div><p class="small muted">فعّل الطرق المتاحة لديك. الدفع الإلكتروني هنا يتم يدوياً (يتواصل معك العميل لإتمام التحويل).</p></div>
+          <div class="card"><h2>🧾 الفاتورة المطبوعة</h2><div class="fg">
+            <label class="l">اسم المحل في الفاتورة<input name="invoice_title" value="${s.invoice_title || ''}"></label>
+            <label class="l">جملة - قطاعي<input name="invoice_tagline" value="${s.invoice_tagline || ''}"></label>
+            <label class="l full">النشاط<input name="invoice_subtitle" value="${s.invoice_subtitle || ''}"></label>
+            <label class="l full">العنوان<input name="invoice_address" value="${s.invoice_address || ''}"></label>
+            <label class="l full">الماركات (مفصولة بفاصلة)<input name="invoice_brands" dir="ltr" value="${s.invoice_brands || ''}"></label>
+            <label class="l">المدينة 1<input name="invoice_city_1" value="${s.invoice_city_1 || ''}"></label>
+            <label class="l">أرقام المدينة 1<input name="invoice_phones_1" dir="ltr" value="${s.invoice_phones_1 || ''}"></label>
+            <label class="l">المدينة 2<input name="invoice_city_2" value="${s.invoice_city_2 || ''}"></label>
+            <label class="l">أرقام المدينة 2<input name="invoice_phones_2" dir="ltr" value="${s.invoice_phones_2 || ''}"></label>
+          </div></div>
           <div class="card"><h2>الجملة و SEO</h2><div class="fg">
             <label class="l full">ملاحظة الجملة<input name="wholesale_note" value="${s.wholesale_note}"></label>
             <label class="l full">وصف المتجر لمحركات البحث<textarea name="seo_description" rows="3">${s.seo_description}</textarea></label>

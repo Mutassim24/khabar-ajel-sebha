@@ -128,6 +128,14 @@ const DEFAULT_SETTINGS = {
   whatsapp: '218926201329',
   whatsapp2: '218928146639', // second WhatsApp number — customers choose which one to message
   phone: '0926201329',
+  // printed invoice (same as the shop's paper invoice)
+  invoice_title: 'خبر عاجل',
+  invoice_subtitle: 'لبيع قطع غيار الهواتف الذكية و مستلزماتها',
+  invoice_tagline: 'جملة - قطاعي',
+  invoice_address: 'سبها - بالقرب من شركة لبيانا',
+  invoice_brands: 'MOXOM, Lenyós, THURAYA',
+  invoice_city_1: 'سبها', invoice_phones_1: '092 641 6112 / 091 500 1122',
+  invoice_city_2: 'طرابلس', invoice_phones_2: '092 747 4310 / 091 116 1000',
   email: '',
   address: 'سبها، ليبيا',
   working_hours: 'يومياً من 9 صباحاً حتى 11 مساءً',
@@ -189,6 +197,9 @@ if (!all('PRAGMA table_info(categories)').some((c) => c.name === 'parent_id')) {
   db.exec('ALTER TABLE categories ADD COLUMN parent_id INTEGER REFERENCES categories(id) ON DELETE CASCADE');
 }
 db.exec('CREATE INDEX IF NOT EXISTS idx_categories_parent ON categories(parent_id)');
+{ const oc = all('PRAGMA table_info(orders)').map((c) => c.name);
+  if (!oc.includes('paid_amount')) db.exec('ALTER TABLE orders ADD COLUMN paid_amount REAL');
+  if (!oc.includes('payment_terms')) db.exec("ALTER TABLE orders ADD COLUMN payment_terms TEXT NOT NULL DEFAULT 'cash'"); }
 if (!all('PRAGMA table_info(categories)').some((c) => c.name === 'media_id')) {
   db.exec('ALTER TABLE categories ADD COLUMN media_id INTEGER REFERENCES media(id) ON DELETE SET NULL');
 }

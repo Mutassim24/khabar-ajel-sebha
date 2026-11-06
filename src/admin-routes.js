@@ -219,7 +219,7 @@ function register(r) {
     if (q.status === 'noprice') where.push('p.price <= 0');
     const w = where.length ? 'WHERE ' + where.join(' AND ') : '';
     const sorts = { newest: 'p.id DESC', name: 'p.name', 'stock-asc': 'p.stock ASC', 'price-desc': 'p.price DESC', sold: 'p.sold_count DESC' };
-    const per = 50; const total = get(`SELECT COUNT(*) AS n FROM products p ${w}`, ...params).n;
+    const per = Math.min(500, Math.max(1, Number(q.per) || 50)); const total = get(`SELECT COUNT(*) AS n FROM products p ${w}`, ...params).n;
     const page = Math.max(1, Number(q.page) || 1);
     const items = all(`SELECT p.id, p.name, p.slug, p.sku, p.price, p.brand, (SELECT name FROM categories WHERE id = c.parent_id) AS parent_name, p.compare_at_price, p.wholesale_price, p.wholesale_min_qty, p.cost_price, p.stock, p.low_stock_threshold, p.active, p.featured, p.badge, p.sold_count, p.category_id, c.name AS category_name,
       (SELECT media_id FROM product_images pi WHERE pi.product_id = p.id ORDER BY sort_order, id LIMIT 1) AS image_id
@@ -344,7 +344,7 @@ function register(r) {
     const cur = get('SELECT * FROM products WHERE id = ?', id);
     if (!cur) throw new HttpError(404, 'المنتج غير موجود');
     const b = await jsonBody(req);
-    const allowed = ['price', 'wholesale_price', 'cost_price', 'stock', 'active', 'featured'];
+    const allowed = ['price', 'wholesale_price', 'wholesale_min_qty', 'cost_price', 'compare_at_price', 'stock', 'active', 'featured'];
     const sub = {}; for (const k of allowed) if (k in b) sub[k] = PRODUCT_SCHEMA[k];
     const d = validate(b, sub);
     const merged = { ...cur, ...d };
@@ -498,6 +498,16 @@ function register(r) {
     const ph = o.phone.startsWith('0') ? '218' + o.phone.slice(1) : o.phone;
     o.customer_whatsapp = `https://wa.me/${ph}?text=${encodeURIComponent(`مرحباً ${o.customer_name}، معك ${getSettings().store_name} بخصوص طلبك رقم ${o.number}.`)}`;
     sendJson(req, res, 200, o);
+  }));
+  r.patch('/api/admin/orders/:id/invoice', A(async (req, res, p) => {
+    const id = Number(p.id); const o = get('SELECT id, total FROM orders WHERE id = ?', id);
+    if (!o) throw new HttpError(404, 'الطلب غير موجود');
+    const d = validate(await jsonBody(req), { paid_amount: { type: 'number', min: 0, max: 10000000, label: 'المدفوع' }, payment_terms: { type: 'string', max: 10 } });
+    if (d.payment_terms && !['cash', 'credit'].includes(d.payment_terms)) throw new HttpError(400, 'نوع الدفع غير صحيح');
+    if (d.paid_amount != null && d.paid_amount > o.total + 0.0005) throw new HttpError(400, 'المدفوع أكبر من قيمة الفاتورة');
+    if (d.paid_amount != null) run('UPDATE orders SET paid_amount = ? WHERE id = ?', d.paid_amount, id);
+    if (d.payment_terms) run('UPDATE orders SET payment_terms = ? WHERE id = ?', d.payment_terms, id);
+    sendJson(req, res, 200, { ok: true });
   }));
   r.post('/api/admin/orders/:id/status', A(async (req, res, p, a) => {
     const d = validate(await jsonBody(req), { status: { type: 'enum', required: true, values: Object.keys(STATUS), label: 'الحالة' }, note: { type: 'string', max: 300 } });
@@ -653,6 +663,8 @@ function register(r) {
       instagram: { type: 'string', max: 200, pattern: /^(https?:\/\/.*)?$/, patternMsg: 'رابط إنستغرام يجب أن يبدأ بـ https://' },
       tiktok: { type: 'string', max: 200, pattern: /^(https?:\/\/.*)?$/, patternMsg: 'رابط تيك توك يجب أن يبدأ بـ https://' },
       site_url: { type: 'string', max: 200, pattern: /^(https?:\/\/[^\s]+)?$/, patternMsg: 'رابط الموقع يجب أن يبدأ بـ https://' },
+      invoice_title: str(60), invoice_subtitle: str(120), invoice_tagline: str(60), invoice_address: str(120), invoice_brands: str(120),
+      invoice_city_1: str(30), invoice_phones_1: str(80), invoice_city_2: str(30), invoice_phones_2: str(80),
       seo_description: str(300), wholesale_note: str(300),
       free_shipping_over: { type: 'number', min: 0, default: 0 },
       shipping_zones: { type: 'array', required: true, max: 50, label: 'مناطق التوصيل' },

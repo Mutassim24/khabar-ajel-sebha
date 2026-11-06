@@ -125,6 +125,27 @@ const q = (s) => encodeURIComponent(s);
     const out = execFileSync(process.execPath, ['-e', `process.env.DATA_DIR=${JSON.stringify(DATA)};const d=require(${JSON.stringify(path.join(__dirname, '..', 'src', 'db.js'))});const p=d.get("SELECT m.id,m.size FROM products p JOIN product_images pi ON pi.product_id=p.id JOIN media m ON m.id=pi.media_id WHERE p.sku='KA-2020'");const old=require(${JSON.stringify(path.join(__dirname, '..', 'seed', 'images-replaced.json'))})['p20-1.webp'];d.run("UPDATE media SET size=? WHERE id=?",old,p.id);d.run("DELETE FROM settings WHERE key='_catalog_photos'");d.seed();console.log(d.get("SELECT size FROM media WHERE id=?",p.id).size!==old)`]).toString().trim();
     assert.equal(out, 'true');
   });
+  await t('invoice: items, qty, unit price, automatic total, amount in words; customer token or admin only', async () => {
+    const { amountInWords } = require('../src/invoice');
+    assert.equal(amountInWords(125.5), 'فقط مائة وخمسة وعشرون ديناراً وخمسمائة درهم لا غير');
+    assert.equal(amountInWords(2000), 'فقط ألفا دينار لا غير');
+    const login = await fetch(BASE + '/api/admin/login', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' }, body: JSON.stringify({ email: 'o@t.ly', password: 'Owner-Pass-2026' }) });
+    const cookie = login.headers.get('set-cookie').split(';')[0]; const H = { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch', Cookie: cookie };
+    const [p1, p2] = (await j('/api/products?per=2&q=' + q('شاحن'))).items;
+    assert.equal((await fetch(`${BASE}/api/admin/products/${p1.id}`, { method: 'PATCH', headers: H, body: JSON.stringify({ price: 12.5, stock: 10, wholesale_price: 10, wholesale_min_qty: 5 }) })).status, 200);
+    assert.equal((await fetch(`${BASE}/api/admin/products/${p2.id}`, { method: 'PATCH', headers: H, body: JSON.stringify({ price: 40, stock: 3 }) })).status, 200);
+    const o = await (await fetch(BASE + '/api/orders', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: 'زبون تجربة', phone: '0912345678', zone: 0, address: 'سبها', payment_method: 'cod', items: [{ id: p1.id, qty: 6 }, { id: p2.id, qty: 2 }] }) })).json();
+    assert.equal(o.total, 6 * 10 + 2 * 40 + 10);
+    assert.equal((await fetch(`${BASE}/invoice/${o.number}`)).status, 404, 'no token, no admin');
+    const html = await (await fetch(`${BASE}/invoice/${o.number}?t=${o.token}`)).text();
+    assert.match(html, /فقط مائة وخمسون ديناراً لا غير/); assert.match(html, /رسوم التوصيل/); assert.match(html, />6</); assert.match(html, /سبها - بالقرب من شركة لبيانا/);
+    assert.equal((html.match(/<tr class="empty">/g) || []).length, 17, '20 rows like the paper');
+    const id = (await (await fetch(`${BASE}/api/admin/orders?q=${o.number}`, { headers: H })).json()).items[0].id;
+    assert.equal((await fetch(`${BASE}/api/admin/orders/${id}/invoice`, { method: 'PATCH', headers: H, body: JSON.stringify({ paid_amount: 100, payment_terms: 'credit' }) })).status, 200);
+    assert.equal((await fetch(`${BASE}/api/admin/orders/${id}/invoice`, { method: 'PATCH', headers: H, body: JSON.stringify({ paid_amount: 1000 }) })).status, 400);
+    const adm = await (await fetch(`${BASE}/invoice/${o.number}`, { headers: { Cookie: cookie } })).text();
+    assert.match(adm, /data-remaining>50 د.ل/); assert.match(adm, /value="credit" checked/);
+  });
   await t('category page shows subcategory chips', async () => {
     const html = await (await fetch(`${BASE}/category/${q('الشواحن')}`)).text();
     assert.match(html, /class="subcats"/); assert.match(html, /وصلة \(خيط شحن\)/);

@@ -5,7 +5,8 @@ const store = require('./store');
 const views = require('./views');
 const { sendHtml, sendJson, send, redirect, jsonBody, clientIp, HttpError } = require('./http');
 const { validate, normalizePhone, isValidPhone } = require('./util');
-const { rateLimit } = require('./auth');
+const { rateLimit, currentAdmin } = require('./auth');
+const { invoicePage } = require('./invoice');
 
 function register(r) {
   // ---------- pages ----------
@@ -53,6 +54,13 @@ function register(r) {
     const row = get('SELECT id, token FROM orders WHERE number = ?', params.number);
     if (!row || !req.query.t || req.query.t !== row.token) return sendHtml(req, res, 404, views.notFound(req));
     sendHtml(req, res, 200, views.orderSuccess(req, store.getOrder(row.id)));
+  });
+  // printable invoice: the customer (order token) or any logged-in admin
+  r.get('/invoice/:number', (req, res, params) => {
+    const row = get('SELECT id, token FROM orders WHERE number = ?', params.number);
+    const admin = currentAdmin(req);
+    if (!row || (!admin && (!req.query.t || req.query.t !== row.token))) return sendHtml(req, res, 404, views.notFound(req));
+    sendHtml(req, res, 200, invoicePage({ order: store.getOrder(row.id), settings: getSettings(), isAdmin: !!admin }), { 'Cache-Control': 'no-store', 'X-Robots-Tag': 'noindex' });
   });
   r.get('/track', (req, res) => {
     const number = String(req.query.number || '').trim().toUpperCase().slice(0, 30);
