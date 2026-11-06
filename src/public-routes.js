@@ -5,8 +5,8 @@ const store = require('./store');
 const views = require('./views');
 const { sendHtml, sendJson, send, redirect, jsonBody, clientIp, HttpError } = require('./http');
 const { validate, normalizePhone, isValidPhone } = require('./util');
-const { rateLimit, currentAdmin } = require('./auth');
-const { invoicePage } = require('./invoice');
+const { rateLimit, currentAdmin, currentCustomer, setCustomerCookie, clearCustomerCookie, customerLogin, hashPassword, verifyPassword } = require('./auth');
+const { invoicePage, amountInWords } = require('./invoice');
 
 function register(r) {
   // ---------- pages ----------
@@ -48,7 +48,11 @@ function register(r) {
     sendHtml(req, res, 200, views.productPage(req, p, store.relatedProducts(p)));
   });
   r.get('/cart', (req, res) => sendHtml(req, res, 200, views.cartPage(req)));
-  r.get('/checkout', (req, res) => sendHtml(req, res, 200, views.checkoutPage(req)));
+  r.get('/checkout', (req, res) => {
+    const c = currentCustomer(req);
+    if (!c && process.env.REQUIRE_ACCOUNT !== 'false' && getSettings().require_account !== false) return redirect(res, '/account/login?next=/checkout');
+    sendHtml(req, res, 200, views.checkoutPage(req, c), { 'Cache-Control': 'no-store' });
+  });
   r.get('/favorites', (req, res) => sendHtml(req, res, 200, views.favoritesPage(req)));
   r.get('/order/:number', (req, res, params) => {
     const row = get('SELECT id, token FROM orders WHERE number = ?', params.number);
@@ -131,7 +135,73 @@ function register(r) {
   });
   r.post('/api/quote', async (req, res) => {
     const b = await jsonBody(req);
-    sendJson(req, res, 200, store.quote({ items: b.items, coupon: typeof b.coupon === 'string' ? b.coupon.slice(0, 40) : '', zone: b.zone }));
+    const q = store.quote({ items: b.items, coupon: typeof b.coupon === 'string' ? b.coupon.slice(0, 40) : '', zone: b.zone });
+    q.total_words = amountInWords(q.total);
+    sendJson(req, res, 200, q);
+  });
+  // ---------- customer accounts ----------
+  const accountRequired = () => process.env.REQUIRE_ACCOUNT !== 'false' && getSettings().require_account !== false;
+  const sameOrigin = (req) => {
+    if (req.headers['x-requested-with'] !== 'fetch') throw new HttpError(403, 'طلب غير مسموح');
+    const origin = req.headers.origin; const host = req.headers['x-forwarded-host'] || req.headers.host;
+    if (origin) { try { if (new URL(origin).host !== host) throw 0; } catch { throw new HttpError(403, 'طلب غير مسموح (مصدر مختلف)'); } }
+  };
+  const safeNext = (n) => (typeof n === 'string' && /^\/(?!\/)[^\s]*$/.test(n) ? n : '/account');
+  const PASS = { type: 'string', required: true, min: 6, max: 100, label: 'كلمة المرور' };
+  r.get('/account', (req, res) => {
+    const c = currentCustomer(req); if (!c) return redirect(res, '/account/login?next=/account');
+    const orders = all('SELECT id, number, token, status, total, created_at, (SELECT SUM(qty) FROM order_items WHERE order_id = o.id) AS items FROM orders o WHERE customer_id = ? ORDER BY id DESC LIMIT 100', c.id);
+    sendHtml(req, res, 200, views.accountPage(req, { customer: c, orders }), { 'Cache-Control': 'no-store' });
+  });
+  r.get('/account/login', (req, res) => {
+    if (currentCustomer(req)) return redirect(res, safeNext(req.query.next));
+    sendHtml(req, res, 200, views.authPage(req, { mode: 'login', next: safeNext(req.query.next) }));
+  });
+  r.get('/account/register', (req, res) => {
+    if (currentCustomer(req)) return redirect(res, safeNext(req.query.next));
+    sendHtml(req, res, 200, views.authPage(req, { mode: 'register', next: safeNext(req.query.next) }));
+  });
+  r.post('/api/account/register', async (req, res) => {
+    sameOrigin(req);
+    if (!rateLimit('reg:' + clientIp(req), 10, 60 * 60e3).ok) throw new HttpError(429, 'محاولات كثيرة، حاول بعد قليل');
+    const d = validate(await jsonBody(req, 8 * 1024), { name: { type: 'string', required: true, min: 2, max: 80, label: 'الاسم' }, phone: { type: 'string', required: true, max: 30, label: 'رقم الهاتف' }, password: PASS, city: { type: 'string', max: 80 }, address: { type: 'string', max: 300 } });
+    d.phone = normalizePhone(d.phone);
+    if (!isValidPhone(d.phone)) throw Object.assign(new HttpError(400, 'رقم الهاتف غير صحيح'), { fields: { phone: 'رقم الهاتف غير صحيح' } });
+    const ex = get('SELECT id, password_hash FROM customers WHERE phone = ?', d.phone);
+    if (ex && ex.password_hash) throw Object.assign(new HttpError(409, 'هذا الرقم عنده حساب من قبل — سجّل الدخول'), { fields: { phone: 'مسجّل من قبل' } });
+    let id;
+    if (ex) { run("UPDATE customers SET name = ?, password_hash = ?, city = COALESCE(?, city), address = COALESCE(?, address), registered_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id = ?", d.name, hashPassword(d.password), d.city || null, d.address || null, ex.id); id = ex.id; }
+    else id = Number(run("INSERT INTO customers(name, phone, city, address, password_hash, registered_at) VALUES(?,?,?,?,?, strftime('%Y-%m-%dT%H:%M:%fZ','now'))", d.name, d.phone, d.city || null, d.address || null, hashPassword(d.password)).lastInsertRowid);
+    const c = get('SELECT id, name, phone, token_version FROM customers WHERE id = ?', id);
+    setCustomerCookie(req, res, c);
+    sendJson(req, res, 201, { ok: true, name: c.name });
+  });
+  r.post('/api/account/login', async (req, res) => {
+    sameOrigin(req);
+    const d = validate(await jsonBody(req, 8 * 1024), { phone: { type: 'string', required: true, max: 30, label: 'رقم الهاتف' }, password: { type: 'string', required: true, max: 100, label: 'كلمة المرور' } });
+    d.phone = normalizePhone(d.phone);
+    const ip = clientIp(req);
+    if (!rateLimit('clogin-ip:' + ip, 20, 15 * 60e3).ok || !rateLimit('clogin:' + d.phone, 8, 15 * 60e3).ok) throw new HttpError(429, 'محاولات دخول كثيرة، حاول بعد ربع ساعة');
+    const c = customerLogin(d.phone, d.password);
+    if (!c) throw new HttpError(401, 'رقم الهاتف أو كلمة المرور غير صحيحة');
+    setCustomerCookie(req, res, c);
+    sendJson(req, res, 200, { ok: true, name: c.name });
+  });
+  r.post('/api/account/logout', (req, res) => { sameOrigin(req); clearCustomerCookie(req, res); sendJson(req, res, 200, { ok: true }); });
+  r.post('/api/account/profile', async (req, res) => {
+    sameOrigin(req); const c = currentCustomer(req); if (!c) throw new HttpError(401, 'سجّل الدخول أولاً');
+    const d = validate(await jsonBody(req, 8 * 1024), { name: { type: 'string', required: true, min: 2, max: 80, label: 'الاسم' }, city: { type: 'string', max: 80 }, address: { type: 'string', max: 300 } });
+    run("UPDATE customers SET name = ?, city = ?, address = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id = ?", d.name, d.city || null, d.address || null, c.id);
+    sendJson(req, res, 200, { ok: true });
+  });
+  r.post('/api/account/password', async (req, res) => {
+    sameOrigin(req); const c = currentCustomer(req); if (!c) throw new HttpError(401, 'سجّل الدخول أولاً');
+    const d = validate(await jsonBody(req, 8 * 1024), { current: { type: 'string', required: true, max: 100, label: 'كلمة المرور الحالية' }, password: PASS });
+    const row = get('SELECT password_hash, token_version FROM customers WHERE id = ?', c.id);
+    if (!verifyPassword(d.current, row.password_hash)) throw new HttpError(400, 'كلمة المرور الحالية غير صحيحة');
+    run('UPDATE customers SET password_hash = ?, token_version = token_version + 1 WHERE id = ?', hashPassword(d.password), c.id);
+    setCustomerCookie(req, res, { id: c.id, token_version: row.token_version + 1 });
+    sendJson(req, res, 200, { ok: true });
   });
   r.post('/api/orders', async (req, res) => {
     const ip = clientIp(req);
@@ -139,6 +209,9 @@ function register(r) {
     if (!rl.ok) throw new HttpError(429, 'تم إرسال طلبات كثيرة من هذا الجهاز، يرجى المحاولة بعد قليل');
     const b = await jsonBody(req);
     if (b.website) throw new HttpError(400, 'تعذّر إرسال الطلب'); // honeypot
+    const cust = currentCustomer(req);
+    if (accountRequired() && !cust) throw Object.assign(new HttpError(401, 'سجّل الدخول أو أنشئ حساباً لإتمام الشراء'), { login: true });
+    if (cust) { b.name = cust.name; b.phone = cust.phone; }
     const d = validate(b, {
       name: { type: 'string', required: true, min: 2, max: 80, label: 'الاسم' },
       phone: { type: 'string', required: true, max: 30, label: 'رقم الهاتف' },
@@ -151,9 +224,10 @@ function register(r) {
     });
     d.phone = normalizePhone(d.phone);
     if (!isValidPhone(d.phone)) throw Object.assign(new HttpError(400, 'رقم الهاتف غير صحيح'), {});
-    const order = store.createOrder(d, ip);
+    const order = store.createOrder({ ...d, customer_id: cust ? cust.id : null }, ip);
+    if (cust) run('UPDATE customers SET city = ?, address = ? WHERE id = ?', order.city, order.address, cust.id);
     console.log(`[order] ${order.number} total=${order.total} items=${order.items.length}`);
-    sendJson(req, res, 201, { number: order.number, token: order.token, url: `/order/${order.number}?t=${order.token}`, whatsapp_url: order.whatsapp_url, total: order.total });
+    sendJson(req, res, 201, { number: order.number, token: order.token, url: `/order/${order.number}?t=${order.token}&send=1`, invoice_url: `/invoice/${order.number}?t=${order.token}`, whatsapp_url: order.whatsapp_url, total: order.total });
   });
   r.post('/api/contact', async (req, res) => {
     const rl = rateLimit('contact:' + clientIp(req), 5, 30 * 60e3);

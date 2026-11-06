@@ -126,7 +126,8 @@ const DEFAULT_SETTINGS = {
   tagline: 'إكسسوارات الهواتف المحمولة وقطع الغيار',
   topline: '🚚 توصيل داخل سبها وإلى جميع المدن الليبية · الدفع عند الاستلام · أسعار جملة للتجار',
   whatsapp: '218926201329',
-  whatsapp2: '218928146639', // second WhatsApp number — customers choose which one to message
+  whatsapp2: '218928146639',
+  require_account: true, // customers must create an account / log in before buying // second WhatsApp number — customers choose which one to message
   phone: '0926201329',
   // printed invoice (same as the shop's paper invoice)
   invoice_title: 'خبر عاجل',
@@ -197,6 +198,10 @@ if (!all('PRAGMA table_info(categories)').some((c) => c.name === 'parent_id')) {
   db.exec('ALTER TABLE categories ADD COLUMN parent_id INTEGER REFERENCES categories(id) ON DELETE CASCADE');
 }
 db.exec('CREATE INDEX IF NOT EXISTS idx_categories_parent ON categories(parent_id)');
+{ const cc = all('PRAGMA table_info(customers)').map((c) => c.name);
+  if (!cc.includes('password_hash')) db.exec('ALTER TABLE customers ADD COLUMN password_hash TEXT');
+  if (!cc.includes('token_version')) db.exec('ALTER TABLE customers ADD COLUMN token_version INTEGER NOT NULL DEFAULT 0');
+  if (!cc.includes('registered_at')) db.exec('ALTER TABLE customers ADD COLUMN registered_at TEXT'); }
 { const oc = all('PRAGMA table_info(orders)').map((c) => c.name);
   if (!oc.includes('paid_amount')) db.exec('ALTER TABLE orders ADD COLUMN paid_amount REAL');
   if (!oc.includes('payment_terms')) db.exec("ALTER TABLE orders ADD COLUMN payment_terms TEXT NOT NULL DEFAULT 'cash'"); }

@@ -98,4 +98,35 @@ function bootstrapAdmin() {
   console.log('========================================================\n');
 }
 
-module.exports = { COOKIE, hashPassword, verifyPassword, setSessionCookie, clearSessionCookie, currentAdmin, rateLimit, login, bootstrapAdmin };
+/* ---------- customer accounts (shop side) ---------- */
+const C_COOKIE = 'ka_c';
+const C_DAYS = 60;
+function currentCustomer(req) {
+  if (req._cust !== undefined) return req._cust;
+  const p = unsign(req.cookies && req.cookies[C_COOKIE]);
+  let c = null;
+  if (p && p.cid) {
+    c = get('SELECT id, name, phone, city, address, token_version FROM customers WHERE id = ? AND password_hash IS NOT NULL', p.cid);
+    if (c && c.token_version !== p.v) c = null;
+  }
+  req._cust = c; return c;
+}
+function setCustomerCookie(req, res, c) {
+  const token = sign({ cid: c.id, v: c.token_version || 0, exp: Date.now() + C_DAYS * 864e5 });
+  const parts = [`${C_COOKIE}=${token}`, 'Path=/', 'HttpOnly', 'SameSite=Lax', `Max-Age=${C_DAYS * 86400}`];
+  if (isSecure(req)) parts.push('Secure');
+  res.appendHeader('Set-Cookie', parts.join('; '));
+}
+function clearCustomerCookie(req, res) {
+  const parts = [`${C_COOKIE}=`, 'Path=/', 'HttpOnly', 'SameSite=Lax', 'Max-Age=0'];
+  if (isSecure(req)) parts.push('Secure');
+  res.appendHeader('Set-Cookie', parts.join('; '));
+}
+function customerLogin(phone, password) {
+  const c = get('SELECT * FROM customers WHERE phone = ?', phone);
+  const ok = verifyPassword(password, c && c.password_hash ? c.password_hash : DUMMY_HASH);
+  return c && c.password_hash && ok ? c : null;
+}
+
+module.exports = { COOKIE, hashPassword, verifyPassword, setSessionCookie, clearSessionCookie, currentAdmin, rateLimit, login, bootstrapAdmin,
+  currentCustomer, setCustomerCookie, clearCustomerCookie, customerLogin };

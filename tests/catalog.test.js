@@ -16,6 +16,21 @@ const q = (s) => encodeURIComponent(s);
   const srv = spawn(process.execPath, [path.join(__dirname, '..', 'server.js')], { env: { ...process.env, PORT, DATA_DIR: DATA, ADMIN_EMAIL: 'o@t.ly', ADMIN_PASSWORD: 'Owner-Pass-2026' }, stdio: 'ignore' });
   for (let i = 0; i < 60; i++) { try { if ((await fetch(BASE + '/healthz')).ok) break; } catch {} await new Promise((r) => setTimeout(r, 100)); }
 
+  let CUST = '';
+  await t('customer account: register (Arabic digits), wrong password, login, required to order', async () => {
+    const H = { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' };
+    const reg = await fetch(BASE + '/api/account/register', { method: 'POST', headers: H, body: JSON.stringify({ name: 'زبون تجربة', phone: '٠٩١٢٣٤٥٦٧٨', password: 'secret12' }) });
+    assert.equal(reg.status, 201); CUST = reg.headers.get('set-cookie').split(';')[0];
+    assert.equal((await fetch(BASE + '/api/account/register', { method: 'POST', headers: H, body: JSON.stringify({ name: 'آخر', phone: '0912345678', password: 'secret12' }) })).status, 409, 'phone taken');
+    assert.equal((await fetch(BASE + '/api/account/login', { method: 'POST', headers: H, body: JSON.stringify({ phone: '0912345678', password: 'nope' }) })).status, 401);
+    assert.equal((await fetch(BASE + '/api/account/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ phone: '0912345678', password: 'secret12' }) })).status, 403, 'needs X-Requested-With');
+    assert.equal((await fetch(BASE + '/api/account/login', { method: 'POST', headers: H, body: JSON.stringify({ phone: '+218 91 234 5678', password: 'secret12' }) })).status, 200);
+    assert.equal((await fetch(BASE + '/checkout', { redirect: 'manual' })).status, 302, 'checkout asks to log in');
+    assert.equal((await fetch(BASE + '/checkout', { headers: { Cookie: CUST } })).status, 200);
+    assert.match(await (await fetch(BASE + '/account', { headers: { Cookie: CUST } })).text(), /زبون تجربة/);
+    const p = (await j('/api/products?per=1')).items[0];
+    assert.equal((await fetch(BASE + '/api/orders', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ zone: 0, address: 'سبها', payment_method: 'cod', items: [{ id: p.id, qty: 1 }] }) })).status, 401, 'guest cannot buy');
+  });
   await t('catalog seeded: 119 real products, every one with a photo', async () => {
     const r = await j('/api/products?per=100');
     assert.equal(r.total, 119); assert.ok(r.items.every((p) => p.image_id), 'all have images');
@@ -44,7 +59,7 @@ const q = (s) => encodeURIComponent(s);
     assert.equal(p.availability.key, 'ask');
     const html = await (await fetch(`${BASE}/product/${q(p.slug)}`)).text();
     assert.match(html, /السعر عند الطلب/); assert.ok(!html.includes('data-add-qty'));
-    const r = await fetch(BASE + '/api/orders', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: 'تجربة', phone: '0912345678', zone: 0, address: 'سبها', payment_method: 'cod', items: [{ id: p.id, qty: 1 }] }) });
+    const r = await fetch(BASE + '/api/orders', { method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: CUST }, body: JSON.stringify({ name: 'تجربة', phone: '0912345678', zone: 0, address: 'سبها', payment_method: 'cod', items: [{ id: p.id, qty: 1 }] }) });
     assert.equal(r.status, 409);
   });
   await t('admin sets a price → product becomes orderable; admin can add a subcategory', async () => {
@@ -134,17 +149,20 @@ const q = (s) => encodeURIComponent(s);
     const [p1, p2] = (await j('/api/products?per=2&q=' + q('شاحن'))).items;
     assert.equal((await fetch(`${BASE}/api/admin/products/${p1.id}`, { method: 'PATCH', headers: H, body: JSON.stringify({ price: 12.5, stock: 10, wholesale_price: 10, wholesale_min_qty: 5 }) })).status, 200);
     assert.equal((await fetch(`${BASE}/api/admin/products/${p2.id}`, { method: 'PATCH', headers: H, body: JSON.stringify({ price: 40, stock: 3 }) })).status, 200);
-    const o = await (await fetch(BASE + '/api/orders', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: 'زبون تجربة', phone: '0912345678', zone: 0, address: 'سبها', payment_method: 'cod', items: [{ id: p1.id, qty: 6 }, { id: p2.id, qty: 2 }] }) })).json();
+    const o = await (await fetch(BASE + '/api/orders', { method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: CUST }, body: JSON.stringify({ name: 'زبون تجربة', phone: '0912345678', zone: 0, address: 'سبها', payment_method: 'cod', items: [{ id: p1.id, qty: 6 }, { id: p2.id, qty: 2 }] }) })).json();
     assert.equal(o.total, 6 * 10 + 2 * 40 + 10);
     assert.equal((await fetch(`${BASE}/invoice/${o.number}`)).status, 404, 'no token, no admin');
     const html = await (await fetch(`${BASE}/invoice/${o.number}?t=${o.token}`)).text();
-    assert.match(html, /فقط مائة وخمسون ديناراً لا غير/); assert.match(html, /رسوم التوصيل/); assert.match(html, />6</); assert.match(html, /سبها - بالقرب من شركة لبيانا/);
+    assert.match(html, /فقط مائة وخمسون ديناراً لا غير/); assert.match(html, /زبون تجربة/); assert.match(html, /رسوم التوصيل/); assert.match(html, />6</); assert.match(html, /سبها - بالقرب من شركة لبيانا/);
     assert.equal((html.match(/<tr class="empty">/g) || []).length, 17, '20 rows like the paper');
     const id = (await (await fetch(`${BASE}/api/admin/orders?q=${o.number}`, { headers: H })).json()).items[0].id;
     assert.equal((await fetch(`${BASE}/api/admin/orders/${id}/invoice`, { method: 'PATCH', headers: H, body: JSON.stringify({ paid_amount: 100, payment_terms: 'credit' }) })).status, 200);
     assert.equal((await fetch(`${BASE}/api/admin/orders/${id}/invoice`, { method: 'PATCH', headers: H, body: JSON.stringify({ paid_amount: 1000 }) })).status, 400);
     const adm = await (await fetch(`${BASE}/invoice/${o.number}`, { headers: { Cookie: cookie } })).text();
     assert.match(adm, /data-remaining>50 د.ل/); assert.match(adm, /value="credit" checked/);
+    const acc = await (await fetch(BASE + '/account', { headers: { Cookie: CUST } })).text(); assert.ok(acc.includes(o.number), 'order listed in my account');
+    const cu = (await (await fetch(`${BASE}/api/admin/customers`, { headers: H })).json()).items.find((c) => c.phone === '0912345678');
+    assert.ok(cu.has_account && !('password_hash' in cu), 'admin sees account flag, never the hash');
   });
   await t('category page shows subcategory chips', async () => {
     const html = await (await fetch(`${BASE}/category/${q('الشواحن')}`)).text();

@@ -23,7 +23,7 @@
 
   async function api(url, body) {
     let res;
-    try { res = await fetch(url, body ? { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) } : {}); }
+    try { res = await fetch(url, body ? { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' }, body: JSON.stringify(body) } : {}); }
     catch { throw new Error('تعذّر الاتصال بالإنترنت، تأكد من الشبكة وحاول مرة أخرى'); }
     let data = null; try { data = await res.json(); } catch {}
     if (!res.ok) { const e = new Error((data && data.error) || 'حدث خطأ في الخادم، حاول مرة أخرى'); e.data = data; e.status = res.status; throw e; }
@@ -283,12 +283,15 @@
     const submit = $('[data-submit]');
     const set = (k, v) => { const el = $(`[data-co="${k}"]`); if (el) el.textContent = v; };
     if (!q || !q.lines.length) {
-      lines.innerHTML = '<div class="empty-box sm"><p>السلة فارغة</p><a class="btn primary sm" href="/shop">تصفّح المنتجات</a></div>';
+      lines.innerHTML = '<tr><td colspan="6"><div class="empty-box sm"><p>السلة فارغة</p><a class="btn primary sm" href="/shop">تصفّح المنتجات</a></div></td></tr>'; set('words', '');
       ['subtotal', 'total'].forEach((k) => set(k, '—')); submit.disabled = true; return;
     }
     submit.disabled = false;
-    lines.innerHTML = q.lines.map((l) => `<div class="co-line"><span>${esc(l.name)} <small>× ${l.qty}${l.price_type === 'wholesale' ? ' · جملة' : ''}</small>${l.error ? `<br><small style="color:var(--red)">${esc(l.error)}</small>` : ''}</span><b>${money(l.line_total)}</b></div>`).join('')
-      + `<p class="small center" style="margin:6px 0 0"><a href="/cart" style="color:var(--blue)">تعديل السلة</a></p>`;
+    lines.innerHTML = q.lines.map((l, k) => `<tr data-line="${l.id}"><td class="m">${k + 1}</td>
+      <td class="nm"><a href="/product/${esc(l.slug)}">${esc(l.name)}</a>${l.price_type === 'wholesale' ? ' <span class="ws">جملة</span>' : ''}${l.error ? `<br><small style="color:var(--red)">${esc(l.error)}</small>` : ''}</td>
+      <td><div class="qty sm"><button type="button" data-line-step="1" aria-label="زيادة">+</button><input type="number" value="${l.qty}" min="1" max="${l.stock}" inputmode="numeric" aria-label="الكمية" data-line-qty><button type="button" data-line-step="-1" aria-label="إنقاص">−</button></div></td>
+      <td class="nw">${money(l.unit_price)}</td><td class="nw"><b>${money(l.line_total)}</b></td><td><button class="rm" type="button" data-line-rm aria-label="حذف">✕</button></td></tr>`).join('');
+    set('words', q.total_words || '');
     set('subtotal', money(q.subtotal));
     $('[data-co-row="discount"]').hidden = !q.discount; set('discount', '-' + money(q.discount));
     set('shipping', q.zone ? (q.free_shipping ? 'مجاني 🎉' : money(q.shipping)) : 'اختر المنطقة');
@@ -299,7 +302,8 @@
   }
   if (co) {
     const saved = store.get('ka_customer', {});
-    for (const k of ['name', 'phone', 'address', 'zone']) if (saved[k] != null && co[k]) co[k].value = saved[k];
+    for (const k of ['name', 'phone', 'address', 'zone']) if (saved[k] != null && co[k] && !co[k].value) co[k].value = saved[k];
+    if (co.zone.value) refreshCart();
     co.zone.addEventListener('change', refreshCart);
     $('[data-apply-coupon]').addEventListener('click', refreshCart);
     co.coupon.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); refreshCart(); } });
@@ -309,28 +313,69 @@
     co.addEventListener('submit', async (e) => {
       e.preventDefault(); showErr('');
       const f = co.elements;
-      const phoneDigits = f.phone.value.replace(/[٠-٩]/g, (c) => '٠١٢٣٤٥٦٧٨٩'.indexOf(c)).replace(/\D/g, '');
+      const phoneDigits = f.phone ? f.phone.value.replace(/[٠-٩]/g, (c) => '٠١٢٣٤٥٦٧٨٩'.indexOf(c)).replace(/\D/g, '') : '000000000';
       const checks = [
-        [f.name, f.name.value.trim().length >= 2, 'يرجى إدخال الاسم الكامل'],
+        [f.name, !f.name || f.name.value.trim().length >= 2, 'يرجى إدخال الاسم الكامل'],
         [f.phone, phoneDigits.length >= 9, 'يرجى إدخال رقم هاتف صحيح'],
         [f.zone, f.zone.value !== '', 'يرجى اختيار منطقة التوصيل'],
         [f.address, f.address.value.trim().length >= 3, 'يرجى إدخال العنوان بالتفصيل'],
       ];
       for (const [el, ok, m] of checks) if (!ok) { el.classList.add('invalid'); el.focus(); return showErr(m); }
       if (!cart.length) return showErr('السلة فارغة');
-      const btn = $('[data-submit]'); btn.disabled = true; btn.textContent = 'جارِ إرسال الطلب...';
-      const body = { name: f.name.value, phone: f.phone.value, zone: Number(f.zone.value), address: f.address.value, notes: f.notes.value, payment_method: (co.querySelector('[name=payment_method]:checked') || {}).value, coupon: f.coupon.value.trim(), website: f.website.value, items: cart };
+      const btn = $('[data-submit]'); const label = btn.innerHTML; btn.disabled = true; btn.textContent = 'جارِ حفظ الفاتورة...';
+      const body = { name: f.name ? f.name.value : '', phone: f.phone ? f.phone.value : '', zone: Number(f.zone.value), address: f.address.value, notes: f.notes.value, payment_method: (co.querySelector('[name=payment_method]:checked') || {}).value, coupon: f.coupon.value.trim(), website: f.website.value, items: cart };
       try {
         const r = await api('/api/orders', body);
         store.set('ka_customer', { name: body.name, phone: body.phone, address: body.address, zone: f.zone.value });
         cart = []; saveCart();
         location.href = r.url;
       } catch (ex) {
-        btn.disabled = false; btn.textContent = 'تأكيد الطلب';
+        btn.disabled = false; btn.innerHTML = label;
+        if (ex.data && ex.data.login) { location.href = '/account/login?next=/checkout'; return; }
         if (ex.data && ex.data.quote) { lastQuote = ex.data.quote; renderCheckout(ex.data.quote); }
         if (ex.data && ex.data.fields) { const k = Object.keys(ex.data.fields)[0]; if (f[k]) f[k].classList.add('invalid'); }
         showErr(ex.message);
       }
+    });
+  }
+
+  // ---------- after buying: open WhatsApp with the invoice ----------
+  const auto = $('[data-wa-auto]');
+  if (auto) {
+    try { history.replaceState(null, '', location.pathname + location.search.replace(/[?&]send=1/, '').replace(/^&/, '?')); } catch {}
+    const nums = (document.body.dataset.whatsapp || '').split(',').filter(Boolean);
+    auto.classList.add('pulse'); auto.scrollIntoView({ block: 'center' });
+    if (nums.length > 1) openWhatsApp(auto.dataset.waText); // the number chooser is a dialog, no popup blocker
+  }
+
+  // ---------- customer account ----------
+  const af = $('#authForm');
+  if (af) af.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const err = $('[data-form-error]', af); const f = af.elements; const reg = af.dataset.mode === 'register';
+    const fail = (el, m) => { if (el) { el.classList.add('invalid'); el.focus(); } err.hidden = false; err.textContent = m; };
+    err.hidden = true;
+    if (reg && f.name.value.trim().length < 2) return fail(f.name, 'اكتب اسمك الكامل');
+    if (f.phone.value.replace(/[^0-9٠-٩]/g, '').length < 9) return fail(f.phone, 'اكتب رقم هاتف صحيح');
+    if (f.password.value.length < (reg ? 6 : 1)) return fail(f.password, reg ? 'كلمة المرور لازم تكون 6 أحرف أو أرقام على الأقل' : 'اكتب كلمة المرور');
+    if (reg && f.password.value !== f.password2.value) return fail(f.password2, 'كلمتا المرور غير متطابقتين');
+    const btn = af.querySelector('[type=submit]'); btn.disabled = true;
+    try {
+      await api('/api/account/' + (reg ? 'register' : 'login'), reg ? { name: f.name.value, phone: f.phone.value, password: f.password.value } : { phone: f.phone.value, password: f.password.value });
+      location.href = af.dataset.next || '/account';
+    } catch (ex) { btn.disabled = false; const k = ex.data && ex.data.fields && Object.keys(ex.data.fields)[0]; fail(k && f[k], ex.message); }
+  });
+  document.addEventListener('click', async (e) => {
+    if (!e.target.closest('[data-logout]')) return;
+    try { await api('/api/account/logout', {}); } catch {}
+    location.href = '/';
+  });
+  for (const [id, url, okMsg] of [['#profileForm', '/api/account/profile', 'تم حفظ بياناتك ✓'], ['#passForm', '/api/account/password', 'تم تغيير كلمة المرور ✓']]) {
+    const pf = $(id); if (!pf) continue;
+    pf.addEventListener('submit', async (e) => {
+      e.preventDefault(); const err = $('[data-form-error]', pf); err.hidden = true;
+      const data = {}; for (const el of pf.elements) if (el.name) data[el.name] = el.value;
+      try { await api(url, data); toast(okMsg); if (id === '#passForm') pf.reset(); } catch (ex) { err.hidden = false; err.textContent = ex.message; }
     });
   }
 

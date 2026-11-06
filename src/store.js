@@ -179,21 +179,21 @@ function quote({ items = [], coupon: code = '', zone = null } = {}) {
 // ---------- orders ----------
 function whatsappText(o, items) {
   const s = getSettings();
-  const lines = items.map((i) => `• ${i.name} × ${i.qty} = ${money(i.line_total)}${i.price_type === 'wholesale' ? ' (جملة)' : ''}`);
+  const { amountInWords } = require('./invoice');
+  const lines = items.map((i, k) => `${k + 1}) ${i.name}${i.price_type === 'wholesale' ? ' (جملة)' : ''}\n    الكمية: ${i.qty} × ${money(i.unit_price)} = ${money(i.line_total)}`);
   return [
-    `السلام عليكم، أرغب بتأكيد طلبي من ${s.store_name}`,
-    `رقم الطلب: ${o.number}`,
+    `🧾 فاتورة شراء — ${s.invoice_title || s.store_name}`,
+    `رقم الفاتورة: ${o.number}`,
+    `الحساب: ${o.customer_name} — ${o.phone}`,
     '',
     ...lines,
     '',
     `المجموع: ${money(o.subtotal)}`,
     o.discount ? `الخصم${o.coupon_code ? ' (' + o.coupon_code + ')' : ''}: -${money(o.discount)}` : null,
-    `التوصيل: ${money(o.shipping_fee)}`,
+    `التوصيل (${o.city || ''}): ${o.shipping_fee ? money(o.shipping_fee) : 'مجاناً'}`,
     `الإجمالي: ${money(o.total)}`,
+    amountInWords(o.total),
     `طريقة الدفع: ${o.payment_label}`,
-    '',
-    `الاسم: ${o.customer_name}`,
-    `الهاتف: ${o.phone}`,
     `العنوان: ${[o.city, o.address].filter(Boolean).join(' — ')}`,
     o.notes ? `ملاحظات: ${o.notes}` : null,
   ].filter((x) => x !== null).join('\n');
@@ -219,7 +219,7 @@ function createOrder(data, ip) {
     if (!q.zone) throw new OrderError('يرجى اختيار منطقة التوصيل');
 
     // customer upsert by phone
-    let cust = get('SELECT * FROM customers WHERE phone = ?', data.phone);
+    let cust = data.customer_id ? get('SELECT * FROM customers WHERE id = ?', data.customer_id) : get('SELECT * FROM customers WHERE phone = ?', data.phone);
     if (cust) run("UPDATE customers SET name = ?, city = ?, address = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id = ?", data.name, q.zone.name, data.address, cust.id);
     else cust = { id: Number(run('INSERT INTO customers(name, phone, city, address) VALUES(?,?,?,?)', data.name, data.phone, q.zone.name, data.address).lastInsertRowid) };
 

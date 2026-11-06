@@ -1,7 +1,8 @@
 'use strict';
 // Server-rendered storefront views (Arabic, RTL). All interpolations are escaped by html``.
-const { html, raw, esc, money } = require('./util');
+const { html, raw, esc, money, STATUS } = require('./util');
 const { getSettings } = require('./db');
+const { currentCustomer } = require('./auth');
 
 const ASSET_V = process.env.ASSET_VERSION || String(Date.now()).slice(-8);
 const asset = (p) => `${p}?v=${ASSET_V}`;
@@ -43,6 +44,7 @@ const icons = {
   cart: raw('<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 4h2l2.4 11.2a2 2 0 0 0 2 1.6h7.7a2 2 0 0 0 2-1.5L21 8H6.2"/><circle cx="10" cy="20" r="1.4"/><circle cx="17" cy="20" r="1.4"/></svg>'),
   home: raw('<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 10.5 12 4l8 6.5V20a1 1 0 0 1-1 1h-4.5v-6h-5v6H5a1 1 0 0 1-1-1z"/></svg>'),
   grid: raw('<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="4" width="7" height="7" rx="1.5"/><rect x="4" y="13" width="7" height="7" rx="1.5"/><rect x="13" y="13" width="7" height="7" rx="1.5"/></svg>'),
+  user: raw('<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"/></svg>'),
   truck: raw('<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h11v10H3zM14 9h4l3 3v4h-7z"/><circle cx="7" cy="18" r="1.8"/><circle cx="17.5" cy="18" r="1.8"/></svg>'),
   wa: raw('<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20l1.3-4A8 8 0 1 1 8 18.8z"/><path d="M9 9.5c.3 1.6 1.9 3.6 3.9 4.6l1.3-1.2 2 1-.4 1.6c-3.3.3-7.5-3.6-7.8-6.9l1.6-.5 1 2z"/></svg>'),
   close: raw('<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>'),
@@ -129,7 +131,7 @@ ${s.topline ? html`<div class="topline">${s.topline}</div>` : ''}
     </form>
     <nav class="actions" aria-label="روابط سريعة">
       <button class="act" type="button" data-theme-toggle aria-label="الوضع الليلي" title="الوضع الليلي / النهاري"><span class="i-moon">${icons.moon}</span><span class="i-sun">${icons.sun}</span></button>
-      <a class="act hide-sm" href="/track">${icons.truck}<span>تتبع طلبك</span></a>
+      ${(() => { const c = currentCustomer(req); return c ? html`<a class="act acc" href="/account" aria-label="حسابي">${icons.user}<span class="hide-sm">${c.name.split(' ')[0]}</span></a>` : html`<a class="act acc" href="/account/login" aria-label="تسجيل الدخول">${icons.user}<span class="hide-sm">دخول</span></a>`; })()}
       <a class="act" href="/favorites" aria-label="المفضلة">${icons.heart}<span class="hide-sm">المفضلة</span><i class="count" data-fav-count hidden>0</i></a>
       <button class="act" type="button" data-open-cart aria-label="السلة">${icons.cart}<span class="hide-sm">السلة</span><i class="count" data-cart-count hidden>0</i></button>
     </nav>
@@ -166,7 +168,7 @@ ${s.announcement ? html`<div class="announce wrap">${s.announcement}</div>` : ''
   <a href="/categories" class="${active === 'cats' ? 'on' : ''}">${icons.grid}<span>الأقسام</span></a>
   <a href="/favorites" class="${active === 'favs' ? 'on' : ''}">${icons.heart}<span>المفضلة</span><i class="count" data-fav-count hidden>0</i></a>
   <button type="button" data-open-cart>${icons.cart}<span>السلة</span><i class="count" data-cart-count hidden>0</i></button>
-  <a href="/track" class="${active === 'track' ? 'on' : ''}">${icons.truck}<span>طلبي</span></a>
+  <a href="/account" class="${active === 'account' ? 'on' : ''}">${icons.user}<span>حسابي</span></a>
 </nav>
 ${waLink ? html`<a class="wa-float" href="${waLink}" target="_blank" rel="noopener" data-wa-text="السلام عليكم، عندي استفسار من موقع ${s.store_name}" aria-label="تواصل عبر واتساب">${icons.wa}</a>` : ''}
 <div class="wa-pick" data-wa-pick hidden role="dialog" aria-label="اختر رقم واتساب"><div class="wa-pick-box"><b>تواصل معنا عبر واتساب</b><p>اختر الرقم اللي تبي تراسله:</p>${waNums.map((n, i) => html`<button type="button" class="btn wa block" data-wa-num="${n}">${icons.wa} ${i ? 'الرقم الثاني' : 'الرقم الأول'} <span dir="ltr">+${n}</span></button>`)}<button type="button" class="btn ghost block" data-wa-close>إلغاء</button></div></div>
@@ -176,7 +178,7 @@ ${waLink ? html`<a class="wa-float" href="${waLink}" target="_blank" rel="noopen
   <div class="drawer-foot">
     <div class="row"><span>المجموع</span><b data-cart-subtotal>0 د.ل</b></div>
     <p class="hint" data-cart-savings hidden></p>
-    <a class="btn primary block" href="/checkout">إتمام الطلب</a>
+    <a class="btn primary block" href="/checkout">🧾 عرض الفاتورة والشراء</a>
     <a class="btn ghost block" href="/cart">عرض السلة</a>
   </div>
 </aside>
@@ -399,60 +401,111 @@ function cartPage(req) {
     <div class="row"><span>المجموع</span><b data-cart-subtotal>0 د.ل</b></div>
     <p class="hint" data-cart-savings hidden></p>
     <p class="muted small">تُحسب رسوم التوصيل وكود الخصم في الخطوة التالية.</p>
-    <a class="btn primary block" href="/checkout" data-checkout-link>متابعة لإتمام الطلب</a>
+    <a class="btn primary block" href="/checkout" data-checkout-link>🧾 عرض الفاتورة والشراء</a>
     <a class="btn ghost block" href="/shop">متابعة التسوق</a>
   </aside>
 </div></div>`;
   return layout(req, { title: 'سلة المشتريات', body, noindex: true });
 }
 
-function checkoutPage(req) {
+function checkoutPage(req, cust) {
   const s = getSettings();
   const methods = (s.payment_methods || []).filter((m) => m.enabled);
   const zones = s.shipping_zones || [];
-  const body = html`<div class="wrap narrow">
-<nav class="crumbs"><a href="/">الرئيسية</a><span>/</span><a href="/cart">السلة</a><span>/</span><b>إتمام الطلب</b></nav>
-<h1 class="page-title">إتمام الطلب</h1>
-<form class="checkout" id="checkoutForm" novalidate>
-  <div class="co-main">
-    <section class="panel">
-      <h2><span class="step">1</span> بيانات المستلم</h2>
-      <div class="fields">
-        <label>الاسم الكامل *<input name="name" required maxlength="80" autocomplete="name" placeholder="مثال: محمد علي"></label>
-        <label>رقم الهاتف *<input name="phone" required inputmode="tel" autocomplete="tel" dir="ltr" placeholder="09X XXX XXXX"><small>سنتواصل معك على هذا الرقم لتأكيد الطلب</small></label>
-        <label class="full">منطقة التوصيل *
-          <select name="zone" required>
-            <option value="">اختر المنطقة</option>
-            ${zones.map((z, i) => html`<option value="${i}">${z.name} — ${Number(z.fee) ? money(z.fee) : 'مجاناً'}</option>`)}
-          </select>
-        </label>
-        <label class="full">العنوان بالتفصيل *<textarea name="address" required maxlength="300" rows="2" placeholder="الحي، الشارع، أقرب معلم"></textarea></label>
-        <label class="full">ملاحظات على الطلب (اختياري)<textarea name="notes" maxlength="500" rows="2" placeholder="مثال: موديل الهاتف، وقت التوصيل المناسب"></textarea></label>
-        <label class="hp" aria-hidden="true">Website<input name="website" tabindex="-1" autocomplete="off"></label>
-      </div>
-    </section>
-    <section class="panel">
-      <h2><span class="step">2</span> طريقة الدفع</h2>
-      <div class="pay-methods">
-        ${methods.map((m, i) => html`<label class="pay"><input type="radio" name="payment_method" value="${m.id}" ${i ? '' : 'checked'}><span><b>${m.name}</b><small>${m.instructions}</small></span></label>`)}
-      </div>
-    </section>
-  </div>
-  <aside class="panel summary co-summary">
-    <h2><span class="step">3</span> مراجعة الطلب</h2>
-    <div class="co-lines" data-co-lines><p class="muted">جارِ التحميل...</p></div>
-    <div class="coupon"><input name="coupon" placeholder="كود الخصم" aria-label="كود الخصم" dir="ltr"><button class="btn ghost sm" type="button" data-apply-coupon>تطبيق</button></div>
+  const body = html`<div class="wrap">
+<nav class="crumbs"><a href="/">الرئيسية</a><span>/</span><a href="/cart">السلة</a><span>/</span><b>الفاتورة والشراء</b></nav>
+<h1 class="page-title">🧾 الفاتورة وإتمام الشراء</h1>
+<form class="checkout co-inv" id="checkoutForm" novalidate>
+  <section class="panel inv-panel">
+    <div class="inv-head"><div><b>${s.invoice_title || s.store_name}</b><small>${s.invoice_tagline || 'جملة - قطاعي'}</small></div>
+      <div class="inv-who">${cust ? html`<span>الزبون: <b>${cust.name}</b></span><span dir="ltr">${cust.phone}</span><a href="/account">تعديل الحساب</a>` : ''}</div></div>
+    <div class="inv-table-wrap"><table class="inv-table"><thead><tr><th>م</th><th>البيان</th><th>الكمية</th><th>سعر الوحدة</th><th>الإجمالي</th><th></th></tr></thead><tbody data-co-lines><tr><td colspan="6" class="muted center">جارِ تحميل الفاتورة...</td></tr></tbody></table></div>
+    <div class="inv-sums">
+      <div class="row"><span>المجموع</span><b data-co="subtotal">—</b></div>
+      <div class="row" data-co-row="discount" hidden><span>الخصم</span><b class="green" data-co="discount">—</b></div>
+      <div class="row"><span>التوصيل</span><b data-co="shipping">اختر المنطقة</b></div>
+      <div class="row total"><span>الإجمالي</span><b data-co="total">—</b></div>
+      <p class="words" data-co="words"></p>
+    </div>
+    <p class="small center"><a href="/shop" style="color:var(--blue)">+ إضافة منتجات أخرى</a></p>
+  </section>
+  <aside class="panel co-side">
+    <h2><span class="step">1</span> التوصيل</h2>
+    <div class="fields one">
+      ${cust ? '' : html`<label>الاسم الكامل *<input name="name" required maxlength="80" autocomplete="name"></label><label>رقم الهاتف *<input name="phone" required inputmode="tel" dir="ltr"></label>`}
+      <label>منطقة التوصيل *
+        <select name="zone" required>
+          <option value="">اختر المنطقة</option>
+          ${zones.map((z, i) => html`<option value="${i}" ${cust && cust.city === z.name ? raw('selected') : ''}>${z.name} — ${Number(z.fee) ? money(z.fee) : 'مجاناً'}</option>`)}
+        </select>
+      </label>
+      <label>العنوان بالتفصيل *<textarea name="address" required maxlength="300" rows="2" placeholder="الحي، الشارع، أقرب معلم">${cust ? cust.address || '' : ''}</textarea></label>
+      <label>ملاحظات (اختياري)<textarea name="notes" maxlength="500" rows="2" placeholder="موديل الهاتف، وقت التوصيل..."></textarea></label>
+      <label class="hp" aria-hidden="true">Website<input name="website" tabindex="-1" autocomplete="off"></label>
+    </div>
+    <h2><span class="step">2</span> طريقة الدفع</h2>
+    <div class="pay-methods">
+      ${methods.map((m, i) => html`<label class="pay"><input type="radio" name="payment_method" value="${m.id}" ${i ? '' : 'checked'}><span><b>${m.name}</b><small>${m.instructions}</small></span></label>`)}
+    </div>
+    <div class="coupon"><input name="coupon" placeholder="كود الخصم (اختياري)" aria-label="كود الخصم" dir="ltr"><button class="btn ghost sm" type="button" data-apply-coupon>تطبيق</button></div>
     <p class="coupon-msg" data-coupon-msg hidden></p>
-    <div class="row"><span>المجموع</span><b data-co="subtotal">—</b></div>
-    <div class="row" data-co-row="discount" hidden><span>الخصم</span><b class="green" data-co="discount">—</b></div>
-    <div class="row"><span>التوصيل</span><b data-co="shipping">اختر المنطقة</b></div>
-    <div class="row total"><span>الإجمالي</span><b data-co="total">—</b></div>
     <p class="form-error" data-form-error hidden></p>
-    <button class="btn primary block lg" type="submit" data-submit>تأكيد الطلب</button>
-    <p class="muted small center">بالضغط على تأكيد الطلب أنت توافق على <a href="/page/shipping">سياسة الشحن والاستبدال</a>.</p>
+    <button class="btn wa block lg" type="submit" data-submit>${icons.wa} شراء وإرسال الفاتورة عبر واتساب</button>
+    <p class="muted small center">يتم حفظ الطلب وفتح واتساب برسالة فيها الفاتورة كاملة. بالشراء أنت توافق على <a href="/page/shipping">سياسة الشحن والاستبدال</a>.</p>
   </aside>
 </form></div>`;
-  return layout(req, { title: 'إتمام الطلب', body, noindex: true, bodyClass: 'is-checkout' });
+  return layout(req, { title: 'الفاتورة وإتمام الشراء', body, noindex: true, bodyClass: 'is-checkout' });
+}
+
+function authPage(req, { mode, next }) {
+  const reg = mode === 'register';
+  const s = getSettings();
+  const body = html`<div class="wrap auth-wrap">
+<div class="panel auth-box">
+  <div class="auth-tabs"><a href="/account/login?next=${encodeURIComponent(next)}" class="${reg ? '' : 'on'}">تسجيل الدخول</a><a href="/account/register?next=${encodeURIComponent(next)}" class="${reg ? 'on' : ''}">إنشاء حساب جديد</a></div>
+  <h1>${reg ? 'أنشئ حسابك' : 'أهلاً بك من جديد'}</h1>
+  <p class="muted">${reg ? `حسابك في ${s.store_name} يحفظ بياناتك وفواتيرك ويخليك تشتري بسرعة.` : 'ادخل برقم هاتفك وكلمة المرور.'}</p>
+  <form id="authForm" data-mode="${mode}" data-next="${next}" novalidate class="fields one">
+    ${reg ? html`<label>الاسم الكامل *<input name="name" required maxlength="80" autocomplete="name" placeholder="مثال: محمد علي"></label>` : ''}
+    <label>رقم الهاتف *<input name="phone" required inputmode="tel" autocomplete="tel" dir="ltr" placeholder="09X XXX XXXX"></label>
+    <label>كلمة المرور *<input name="password" type="password" required minlength="6" autocomplete="${reg ? 'new-password' : 'current-password'}" placeholder="${reg ? '6 أحرف أو أرقام على الأقل' : ''}"></label>
+    ${reg ? html`<label>تأكيد كلمة المرور *<input name="password2" type="password" required minlength="6" autocomplete="new-password"></label>` : ''}
+    <p class="form-error" data-form-error hidden></p>
+    <button class="btn primary block lg" type="submit">${reg ? 'إنشاء الحساب' : 'دخول'}</button>
+  </form>
+  <p class="center small">${reg ? html`عندك حساب؟ <a href="/account/login?next=${encodeURIComponent(next)}">سجّل الدخول</a>` : html`ما عندكش حساب؟ <a href="/account/register?next=${encodeURIComponent(next)}">أنشئ حساباً جديداً</a>`}</p>
+  ${reg ? '' : html`<p class="center small muted">نسيت كلمة المرور؟ تواصل معنا عبر واتساب ونعيد تعيينها لك.</p>`}
+</div></div>`;
+  return layout(req, { title: reg ? 'إنشاء حساب' : 'تسجيل الدخول', body, noindex: true, active: 'account' });
+}
+
+function accountPage(req, { customer: c, orders }) {
+  const s = getSettings();
+  const body = html`<div class="wrap narrow">
+<div class="acc-head"><span class="acc-av">${c.name.trim().charAt(0)}</span><div><h1>${c.name}</h1><span dir="ltr" class="muted">${c.phone}</span></div><button class="btn ghost sm" type="button" data-logout>تسجيل الخروج</button></div>
+<section class="panel"><h2>🧾 طلباتي وفواتيري</h2>
+${orders.length ? html`<div class="acc-orders">${orders.map((o) => html`<div class="acc-o"><div><b dir="ltr">${o.number}</b><small>${new Date(o.created_at).toLocaleDateString('ar-LY', { timeZone: 'Africa/Tripoli' })} · ${o.items || 0} قطعة</small></div><span class="pill st-${o.status}">${STATUS[o.status] || o.status}</span><b>${money(o.total)}</b><a class="btn sm" href="/invoice/${o.number}?t=${o.token}">الفاتورة</a></div>`)}</div>`
+  : html`<div class="empty-box sm"><p>ما عندك طلبات لسا</p><a class="btn primary sm" href="/shop">تسوّق الآن</a></div>`}
+</section>
+<section class="panel"><h2>بياناتي</h2>
+  <form id="profileForm" class="fields" novalidate>
+    <label>الاسم *<input name="name" required maxlength="80" value="${c.name}"></label>
+    <label>المدينة / المنطقة<select name="city"><option value="">—</option>${(s.shipping_zones || []).map((z) => html`<option ${c.city === z.name ? raw('selected') : ''}>${z.name}</option>`)}</select></label>
+    <label class="full">العنوان<textarea name="address" rows="2" maxlength="300">${c.address || ''}</textarea></label>
+    <p class="form-error full" data-form-error hidden></p>
+    <button class="btn primary" type="submit">حفظ البيانات</button>
+  </form>
+</section>
+<section class="panel"><h2>تغيير كلمة المرور</h2>
+  <form id="passForm" class="fields" novalidate>
+    <label>كلمة المرور الحالية<input name="current" type="password" required autocomplete="current-password"></label>
+    <label>كلمة المرور الجديدة<input name="password" type="password" required minlength="6" autocomplete="new-password"></label>
+    <p class="form-error full" data-form-error hidden></p>
+    <button class="btn" type="submit">تغيير كلمة المرور</button>
+  </form>
+</section>
+</div>`;
+  return layout(req, { title: 'حسابي', body, noindex: true, active: 'account' });
 }
 
 function statusTimeline(o) {
@@ -482,7 +535,7 @@ function orderSummary(o) {
 function orderSuccess(req, o) {
   const body = html`<div class="wrap narrow">
 <div class="success-hero"><span class="check">✓</span><h1>تم استلام طلبك بنجاح</h1><p>شكراً لك ${o.customer_name}! سنتواصل معك على الرقم <b dir="ltr">${o.phone}</b> لتأكيد الطلب.</p></div>
-${o.whatsapp_url ? html`<div class="panel wa-cta"><p><b>لتسريع التأكيد</b> أرسل تفاصيل الطلب إلينا عبر واتساب بضغطة واحدة.</p><a class="btn wa lg" href="${o.whatsapp_url}" target="_blank" rel="noopener" data-wa-text="${o.whatsapp_text}">${icons.wa} إرسال الطلب عبر واتساب</a></div>` : ''}
+${o.whatsapp_url ? html`<div class="panel wa-cta"><p><b>آخر خطوة:</b> أرسل الفاتورة لنا عبر واتساب بضغطة واحدة لتأكيد الطلب.</p><a class="btn wa lg" href="${o.whatsapp_url}" target="_blank" rel="noopener" data-wa-text="${o.whatsapp_text + '\n\n🧾 رابط الفاتورة: ' + siteUrl(req) + '/invoice/' + o.number + '?t=' + o.token}" ${req.query.send ? raw('data-wa-auto') : ''}>${icons.wa} إرسال الفاتورة عبر واتساب</a></div>` : ''}
 <p class="center"><a class="btn ghost" href="/invoice/${o.number}?t=${o.token}">🧾 عرض الفاتورة وطباعتها</a></p>
 ${orderSummary(o)}
 <div class="center gap"><a class="btn ghost" href="/track?number=${encodeURIComponent(o.number)}">تتبع الطلب</a><a class="btn primary" href="/shop">متابعة التسوق</a></div>
@@ -556,4 +609,4 @@ function errorPage(req) {
   return layout(req, { title: 'خطأ', body, noindex: true });
 }
 
-module.exports = { layout, home, shop, categoriesPage, productPage, cartPage, checkoutPage, orderSuccess, trackPage, favoritesPage, staticPage, notFound, errorPage, grid, productCard, siteUrl, md };
+module.exports = { layout, home, shop, categoriesPage, productPage, cartPage, checkoutPage, authPage, accountPage, orderSuccess, trackPage, favoritesPage, staticPage, notFound, errorPage, grid, productCard, siteUrl, md };

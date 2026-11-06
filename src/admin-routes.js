@@ -538,6 +538,7 @@ function register(r) {
     const page = Math.max(1, Number(q.page) || 1);
     const items = all(`SELECT c.*, COUNT(o.id) AS orders_count, COALESCE(SUM(CASE WHEN o.status != 'cancelled' THEN o.total END), 0) AS total_spent, MAX(o.created_at) AS last_order_at
       FROM customers c LEFT JOIN orders o ON o.customer_id = c.id ${w} GROUP BY c.id ORDER BY last_order_at DESC NULLS LAST, c.id DESC LIMIT ? OFFSET ?`, ...params, per, (page - 1) * per);
+    for (const c of items) { c.has_account = !!c.password_hash; delete c.password_hash; delete c.token_version; }
     sendJson(req, res, 200, { items, total, page, pages: Math.max(1, Math.ceil(total / per)) });
   }));
   r.get('/api/admin/customers.csv', A((req, res) => {
@@ -548,9 +549,17 @@ function register(r) {
   r.get('/api/admin/customers/:id', A((req, res, p) => {
     const c = get('SELECT * FROM customers WHERE id = ?', Number(p.id));
     if (!c) throw new HttpError(404, 'العميل غير موجود');
+    c.has_account = !!c.password_hash; delete c.password_hash; delete c.token_version;
     c.orders = all('SELECT id, number, total, status, created_at FROM orders WHERE customer_id = ? ORDER BY id DESC', c.id).map((o) => ({ ...o, status_label: STATUS[o.status] }));
     c.total_spent = round2(c.orders.filter((o) => o.status !== 'cancelled').reduce((a2, o) => a2 + o.total, 0));
     sendJson(req, res, 200, c);
+  }));
+  // owner/staff sets a new password for a customer who forgot theirs (logs them out everywhere)
+  r.post('/api/admin/customers/:id/password', A(async (req, res, p) => {
+    const d = validate(await jsonBody(req), { password: { type: 'string', required: true, min: 6, max: 100, label: 'كلمة المرور' } });
+    const r2 = run("UPDATE customers SET password_hash = ?, token_version = token_version + 1, registered_at = COALESCE(registered_at, strftime('%Y-%m-%dT%H:%M:%fZ','now')) WHERE id = ?", auth.hashPassword(d.password), Number(p.id));
+    if (!Number(r2.changes)) throw new HttpError(404, 'العميل غير موجود');
+    sendJson(req, res, 200, { ok: true });
   }));
   r.put('/api/admin/customers/:id', A(async (req, res, p) => {
     const d = validate(await jsonBody(req), { name: { type: 'string', required: true, min: 2, max: 80, label: 'الاسم' }, city: { type: 'string', max: 120 }, address: { type: 'string', max: 300 }, type: { type: 'enum', values: ['retail', 'wholesale'], default: 'retail' }, notes: { type: 'string', max: 2000 } });
@@ -663,6 +672,7 @@ function register(r) {
       instagram: { type: 'string', max: 200, pattern: /^(https?:\/\/.*)?$/, patternMsg: 'رابط إنستغرام يجب أن يبدأ بـ https://' },
       tiktok: { type: 'string', max: 200, pattern: /^(https?:\/\/.*)?$/, patternMsg: 'رابط تيك توك يجب أن يبدأ بـ https://' },
       site_url: { type: 'string', max: 200, pattern: /^(https?:\/\/[^\s]+)?$/, patternMsg: 'رابط الموقع يجب أن يبدأ بـ https://' },
+      require_account: { type: 'bool' },
       invoice_title: str(60), invoice_subtitle: str(120), invoice_tagline: str(60), invoice_address: str(120), invoice_brands: str(120),
       invoice_city_1: str(30), invoice_phones_1: str(80), invoice_city_2: str(30), invoice_phones_2: str(80),
       seo_description: str(300), wholesale_note: str(300),

@@ -145,6 +145,8 @@ function errorPayload(e) {
   if (e && e.status && e.status < 500) {
     const body = { error: e.message };
     if (e.quote) body.quote = e.quote;
+    if (e.login) body.login = true;
+    if (e.fields) body.fields = e.fields;
     return { status: e.status, body };
   }
   return { status: 500, body: { error: 'حدث خطأ غير متوقع في الخادم' } };

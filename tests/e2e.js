@@ -26,7 +26,7 @@ async function req(method, url, body, headers = {}) {
 
 (async () => {
   const srv = spawn(process.execPath, [path.join(__dirname, '..', 'server.js')], {
-    env: { ...process.env, PORT, DATA_DIR: DATA, SEED_SAMPLE_PRODUCTS: 'true', SEED_CATALOG: 'false', ADMIN_EMAIL: ADMIN.email, ADMIN_PASSWORD: ADMIN.password, NODE_ENV: 'test' }, stdio: ['ignore', 'pipe', 'pipe'],
+    env: { REQUIRE_ACCOUNT: 'false',  ...process.env, PORT, DATA_DIR: DATA, SEED_SAMPLE_PRODUCTS: 'true', SEED_CATALOG: 'false', ADMIN_EMAIL: ADMIN.email, ADMIN_PASSWORD: ADMIN.password, NODE_ENV: 'test' }, stdio: ['ignore', 'pipe', 'pipe'],
   });
   let log = ''; srv.stdout.on('data', (d) => (log += d)); srv.stderr.on('data', (d) => (log += d));
   for (let i = 0; i < 50; i++) { try { if ((await fetch(BASE + '/healthz')).ok) break; } catch {} await new Promise((r) => setTimeout(r, 100)); }
@@ -236,7 +236,7 @@ async function req(method, url, body, headers = {}) {
     await t('mobile: cart page qty change + checkout with coupon → success page', async () => {
       await page.goto(BASE + '/cart'); await page.waitForSelector('[data-line]');
       await page.click('[data-line-step="1"]'); await page.waitForFunction(() => document.querySelector('[data-line-qty]').value === '2');
-      await page.goto(BASE + '/checkout'); await page.waitForSelector('.co-line');
+      await page.goto(BASE + '/checkout'); await page.waitForSelector('[data-co-lines] tr[data-line]');
       await page.click('[data-submit]'); assert.match(await page.textContent('[data-form-error]'), /الاسم/);
       await page.fill('[name=name]', 'فاطمة علي'); await page.fill('[name=phone]', '0915556666');
       await page.selectOption('[name=zone]', '0'); await page.fill('[name=address]', 'سبها، حي الثانوية');

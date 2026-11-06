@@ -457,54 +457,90 @@
   };
 
   // ---------- orders ----------
-  // ---------- quick price entry: every product on one page ----------
+  // ---------- quick price entry: products grouped by category, grid cards ----------
   routes.prices = async (v, parts, qs) => {
     const cats = await loadCats();
-    const f = { q: qs.get('q') || '', category: qs.get('category') || '', status: qs.get('status') || 'noprice' };
-    const d = await api('GET', '/api/admin/products?' + new URLSearchParams({ ...f, sort: 'name', per: 500 }));
-    const F = [['price', 'سعر القطاعي *'], ['wholesale_price', 'سعر الجملة'], ['wholesale_min_qty', 'الجملة من كمية'], ['cost_price', 'التكلفة'], ['stock', 'الكمية']];
-    v.innerHTML = String(h`${head('إدخال الأسعار', `${num(d.total)} منتج — عدّل الأسعار ثم اضغط «حفظ الكل»`, h`<button class="btn primary" data-save-all disabled>💾 حفظ الكل</button>`)}
+    const f = { q: qs.get('q') || '', status: qs.has('status') ? qs.get('status') : 'noprice', cat: qs.get('cat') || '' };
+    const d = await api('GET', '/api/admin/products?' + new URLSearchParams({ q: f.q, status: f.status, sort: 'name', per: 500 }));
+    // group by top-level category
+    const parentOf = (p) => p.parent_name || p.category_name || 'بدون قسم';
+    const groups = new Map();
+    for (const p of d.items) { const g = parentOf(p); if (!groups.has(g)) groups.set(g, []); groups.get(g).push(p); }
+    const order = cats.filter((c) => !c.parent_id).map((c) => c.name);
+    const names = [...groups.keys()].sort((a, b) => (order.indexOf(a) + 1 || 999) - (order.indexOf(b) + 1 || 999));
+    const active = f.cat && groups.has(f.cat) ? f.cat : '';
+    const F = [['price', 'سعر القطاعي *'], ['wholesale_price', 'سعر الجملة'], ['wholesale_min_qty', 'الجملة من كمية'], ['cost_price', 'التكلفة'], ['stock', 'الكمية المتوفرة']];
+    const val = (x) => (x === null || x === undefined ? '' : String(x));
+    const card = (p) => h`<div class="pc" data-id="${p.id}">
+        <div class="pc-top">${p.image_id ? h`<img src="${img(p.image_id, 160)}" alt="" loading="lazy">` : h`<span class="ph">📦</span>`}<div><a href="#/products/${p.id}">${p.name}</a><small class="ltr">${p.sku}${p.category_name && p.parent_name ? ' · ' + p.category_name : ''}</small></div></div>
+        <div class="pc-f">${F.map(([k, l]) => h`<label class="${k === 'price' ? 'pmain' : ''}">${l}<input type="text" inputmode="decimal" autocomplete="off" data-num data-k="${k}" data-orig="${val(p[k])}" value="${val(p[k])}" placeholder="${k === 'wholesale_price' ? 'اختياري' : '0'}"><em data-err></em></label>`)}</div>
+        <div class="pc-st" data-st>${p.price > 0 ? h`<span class="ok">✓ ${money(p.price)}</span>` : h`<span class="warn">السعر عند الطلب</span>`}</div>
+      </div>`;
+    v.innerHTML = String(h`${head('إدخال الأسعار', `${num(d.total)} منتج ${f.status === 'noprice' ? 'بدون سعر' : ''}`, h`<button class="btn primary" data-save-all disabled>💾 حفظ الكل</button>`)}
       <form class="filters" data-filter>
         <input class="f grow" name="q" placeholder="بحث بالاسم أو SKU..." value="${f.q}">
-        <select class="f" name="category"><option value="">كل الأقسام</option>${catOptions(cats, f.category)}</select>
         <select class="f" name="status">${[['noprice', 'بدون سعر فقط'], ['', 'كل المنتجات']].map(([k, l]) => h`<option value="${k}" ${k === f.status ? 'selected' : ''}>${l}</option>`)}</select>
-        <button class="btn">عرض</button>
+        <button class="btn">بحث</button>
       </form>
-      <p class="small muted">المنتج اللي سعره 0 يظهر للزبون «السعر عند الطلب». الأسعار بالدينار الليبي، وتقدر تكتب كسور مثل 12.5 (اثنا عشر ديناراً وخمسمائة درهم).</p>
-      ${d.items.length ? h`<div class="price-list">${d.items.map((p) => h`<div class="pr card" data-id="${p.id}">
-        <a class="pname" href="#/products/${p.id}">${p.image_id ? h`<img class="thumb" src="${img(p.image_id, 160)}" alt="">` : h`<span class="thumb">📦</span>`}<span><b>${p.name}</b><small class="ltr">${p.sku}</small></span></a>
-        <div class="pr-f">${F.map(([k, l]) => h`<label>${l}<input type="text" inputmode="decimal" autocomplete="off" data-num min="${k === 'wholesale_min_qty' ? 1 : 0}" step="${k === 'stock' || k === 'wholesale_min_qty' ? 1 : 0.001}" inputmode="decimal" data-k="${k}" data-orig="${p[k] ?? ''}" value="${p[k] ?? ''}" placeholder="${k === 'wholesale_price' ? '—' : ''}"></label>`)}</div>
-      </div>`)}</div><div class="savebar"><button class="btn primary" data-save-all disabled>💾 حفظ الكل</button><span data-dirty class="small muted"></span></div>`
-    : h`<div class="card empty">${f.status === 'noprice' ? '✓ كل المنتجات عليها أسعار.' : 'لا توجد منتجات مطابقة.'}</div>`}`);
-    $('[data-filter]', v).onsubmit = (e) => { e.preventDefault(); setQs('prices', formData(e.target)); };
-    $$('[data-filter] select', v).forEach((s) => (s.onchange = () => setQs('prices', formData(s.form))));
-    const dirtyRows = () => $$('.pr', v).filter((r) => $$('[data-k]', r).some((i) => i.value !== i.dataset.orig));
-    const refresh = () => { const n = dirtyRows().length; $$('[data-save-all]', v).forEach((b) => { b.disabled = !n; b.textContent = n ? `💾 حفظ الكل (${n})` : '💾 حفظ الكل'; }); const dd = $('[data-dirty]', v); if (dd) dd.textContent = n ? `${n} منتج تم تعديله ولم يُحفظ بعد` : ''; };
-    v.addEventListener('input', (e) => { const i = e.target.closest('[data-k]'); if (!i) return; i.classList.toggle('chg', i.value !== i.dataset.orig); i.classList.remove('bad'); refresh(); });
-    window.onbeforeunload = () => (dirtyRows().length ? true : undefined);
+      <div class="cat-tabs"><a href="#" data-tab="" class="${active ? '' : 'on'}">الكل <b>${num(d.total)}</b></a>${names.map((n) => h`<a href="#" data-tab="${n}" class="${active === n ? 'on' : ''}">${n} <b>${groups.get(n).length}</b></a>`)}</div>
+      <p class="small muted hint">اكتب السعر بالدينار (مثال: 25 أو 12.5)، والأرقام العربية مقبولة. <b>سعر الجملة لازم يكون أقل من سعر القطاعي.</b> واكتب <b>الكمية المتوفرة</b> عشان الزبون يقدر يشتري. المنتج اللي سعره 0 يظهر «السعر عند الطلب».</p>
+      ${d.items.length ? h`${names.map((n) => h`<section class="pgroup" data-group="${n}" ${active && active !== n ? raw('hidden') : ''}><h2>${n} <small>${groups.get(n).length} منتج</small></h2><div class="pgrid">${groups.get(n).map(card)}</div></section>`)}
+        <div class="savebar"><button class="btn primary" data-save-all disabled>💾 حفظ الكل</button><span data-dirty class="small muted"></span></div>`
+      : h`<div class="card empty">${f.status === 'noprice' ? '✓ كل المنتجات عليها أسعار.' : 'لا توجد منتجات مطابقة.'}</div>`}`);
+    $('[data-filter]', v).onsubmit = (e) => { e.preventDefault(); setQs('prices', { ...formData(e.target), cat: active }); };
+    $$('[data-filter] select', v).forEach((s) => (s.onchange = () => setQs('prices', { ...formData(s.form), cat: active })));
+    v.querySelector('.cat-tabs').onclick = (e) => {
+      const t = e.target.closest('[data-tab]'); if (!t) return; e.preventDefault();
+      $$('.cat-tabs a', v).forEach((a) => a.classList.toggle('on', a === t));
+      $$('.pgroup', v).forEach((g) => { g.hidden = !!t.dataset.tab && g.dataset.group !== t.dataset.tab; });
+      history.replaceState(null, '', '#/prices?' + new URLSearchParams({ q: f.q, status: f.status, cat: t.dataset.tab }));
+    };
+    const isDirty = (i) => i.value.trim() !== i.dataset.orig;
+    const dirtyCards = () => $$('.pc', v).filter((c) => $$('[data-k]', c).some(isDirty));
+    const refresh = () => { const n = dirtyCards().length; $$('[data-save-all]', v).forEach((b) => { b.disabled = !n; b.textContent = n ? `💾 حفظ الكل (${n})` : '💾 حفظ الكل'; }); const dd = $('[data-dirty]', v); if (dd) dd.textContent = n ? `${n} منتج معدّل لم يُحفظ بعد` : ''; };
+    const setErr = (i, m) => { i.classList.toggle('bad', !!m); $('[data-err]', i.parentNode).textContent = m || ''; };
+    // validate one card; returns { body, ok }
+    const check = (c) => {
+      const get = (k) => $(`[data-k="${k}"]`, c); const n = (k) => (get(k).value.trim() === '' ? null : Number(get(k).value));
+      const body = {}; let ok = true;
+      for (const i of $$('[data-k]', c)) {
+        setErr(i, '');
+        if (!isDirty(i)) continue;
+        const raw = i.value.trim(); const k = i.dataset.k;
+        if (raw !== '' && !Number.isFinite(Number(raw))) { setErr(i, 'رقم غير صحيح'); ok = false; continue; }
+        if (raw !== '' && Number(raw) < 0) { setErr(i, 'لا يقبل السالب'); ok = false; continue; }
+        if (k === 'wholesale_min_qty' && (raw === '' || Number(raw) < 1 || !Number.isInteger(Number(raw)))) { setErr(i, 'عدد صحيح 1 أو أكثر'); ok = false; continue; }
+        if (k === 'stock' && raw !== '' && !Number.isInteger(Number(raw))) { setErr(i, 'عدد صحيح'); ok = false; continue; }
+        body[k] = raw === '' ? (k === 'wholesale_price' ? null : 0) : Number(raw);
+      }
+      const price = n('price') || 0; const ws = n('wholesale_price');
+      if (ws !== null && ws > 0 && (price <= 0 || ws >= price)) {
+        setErr(get('wholesale_price'), price > 0 ? `لازم أقل من ${price}` : 'اكتب سعر القطاعي أولاً'); delete body.wholesale_price; ok = false;
+      }
+      return { body, ok };
+    };
+    v.addEventListener('input', (e) => { const i = e.target.closest('[data-k]'); if (!i) return; i.classList.toggle('chg', isDirty(i)); check(i.closest('.pc')); refresh(); });
+    window.onbeforeunload = () => (dirtyCards().length ? true : undefined);
     v.addEventListener('click', async (e) => {
       if (!e.target.closest('[data-save-all]')) return;
-      const rows = dirtyRows(); let ok = 0, bad = 0;
+      const list = dirtyCards(); let ok = 0, bad = 0;
       $$('[data-save-all]', v).forEach((b) => (b.disabled = true));
-      for (const r of rows) {
-        const body = {};
-        for (const i of $$('[data-k]', r)) {
-          if (i.value === i.dataset.orig) continue;
-          if (i.value === '' && i.dataset.k === 'wholesale_min_qty') { i.value = i.dataset.orig; continue; }
-          if (i.value !== '' && !Number.isFinite(Number(i.value))) { i.classList.add('bad'); continue; }
-          body[i.dataset.k] = i.value === '' ? (i.dataset.k === 'wholesale_price' ? null : 0) : Number(i.value);
-        }
-        if (!Object.keys(body).length) { bad++; continue; }
+      for (const c of list) {
+        const { body, ok: valid } = check(c);
+        if (!valid) bad++;
+        if (!Object.keys(body).length) continue;
         try {
-          const saved = await api('PATCH', `/api/admin/products/${r.dataset.id}`, body); ok++;
-          $$('[data-k]', r).forEach((i) => { const sv = saved[i.dataset.k]; i.value = sv ?? ''; i.dataset.orig = i.value; i.classList.remove('chg'); });
-          r.classList.add('saved');
-          let st = $('.pr-st', r); if (!st) { st = document.createElement('div'); st.className = 'pr-st'; r.appendChild(st); }
-          st.innerHTML = saved.price > 0 ? `✓ محفوظ — يظهر للزبون بسعر <b>${money(saved.price)}</b>${saved.stock > 0 ? '' : ' <span style="color:#d97706">(الكمية 0 فيظهر «نفد المخزون» — اكتب الكمية المتوفرة)</span>'} · <a href="/product/${encodeURIComponent(saved.slug)}" target="_blank">عرض في المتجر ↗</a>` : '✓ محفوظ — السعر 0 فيظهر «السعر عند الطلب»';
-        }
-        catch (ex) { bad++; $$('[data-k]', r).forEach((i) => i.value !== i.dataset.orig && i.classList.add('bad')); r.title = ex.message; toast(`${$('b', r).textContent}: ${ex.message}`, true); }
+          const saved = await api('PATCH', `/api/admin/products/${c.dataset.id}`, body); if (valid) ok++;
+          for (const i of $$('[data-k]', c)) if (i.dataset.k in body) { i.value = val(saved[i.dataset.k]); i.dataset.orig = i.value; i.classList.remove('chg'); }
+          $('[data-st]', c).innerHTML = saved.price > 0
+            ? `<span class="ok">✓ محفوظ — ${money(saved.price)}</span>${saved.stock > 0 ? '' : ' <span class="warn">الكمية 0 = «نفد المخزون»</span>'} <a href="/product/${encodeURIComponent(saved.slug)}" target="_blank">عرض ↗</a>`
+            : '<span class="warn">✓ محفوظ — السعر 0 = «السعر عند الطلب»</span>';
+          c.classList.add('saved');
+        } catch (ex) { bad++; $('[data-st]', c).innerHTML = `<span class="bad">✗ ${ex.message}</span>`; }
       }
-      refresh(); if (ok) toast(`تم حفظ ${ok} منتج ✓${bad ? ` — ${bad} فيها خطأ (باللون الأحمر)` : ''}`, !!bad);
+      refresh();
+      if (ok || bad) toast(bad ? `تم حفظ ${ok} — و${bad} فيها خانة لازم تصلحها (باللون الأحمر)` : `تم حفظ ${ok} منتج ✓`, !!bad);
+      if (bad) { const first = $('.pc input.bad', v); if (first) first.scrollIntoView({ block: 'center' }); }
     });
   };
   routes.orders = async (v, parts, qs) => {
@@ -588,7 +624,9 @@
           <label class="l">الاسم<input name="name" value="${c.name}"></label><label class="l">المنطقة<input name="city" value="${c.city || ''}"></label>
           <label class="l">العنوان<input name="address" value="${c.address || ''}"></label>
           <label class="l">النوع<select name="type"><option value="retail" ${c.type === 'retail' ? 'selected' : ''}>قطاعي</option><option value="wholesale" ${c.type === 'wholesale' ? 'selected' : ''}>تاجر جملة</option></select></label>
-          <label class="l">ملاحظات<textarea name="notes">${c.notes || ''}</textarea></label><button class="btn primary">حفظ</button></form></div>`);
+          <label class="l">ملاحظات<textarea name="notes">${c.notes || ''}</textarea></label><button class="btn primary">حفظ</button></form>
+        <div class="card"><h2>حساب الدخول في المتجر</h2><p class="small">${c.has_account ? '✓ العميل عنده حساب، ويدخل برقم هاتفه وكلمة المرور.' : 'العميل ما سوّى حساب بعد. تقدر تعطيه كلمة مرور من هنا ويدخل برقم هاتفه.'}</p><div class="tools"><input class="f" data-cpass placeholder="كلمة مرور جديدة (6 أحرف على الأقل)" autocomplete="off"><button class="btn" data-set-cpass>${c.has_account ? 'تعيين كلمة مرور جديدة' : 'إنشاء حساب له'}</button></div></div></div>`);
+      $('[data-set-cpass]', v).onclick = async () => { const pw = $('[data-cpass]', v).value; try { await api('POST', `/api/admin/customers/${c.id}/password`, { password: pw }); toast('تم ✓ — أعطِ العميل كلمة المرور الجديدة'); route(); } catch (ex) { fail(ex); } };
       v.onclick = (e) => { const g = e.target.closest('[data-go]'); if (g) location.hash = g.dataset.go; };
       $('form', v).onsubmit = async (e) => { e.preventDefault(); try { await api('PUT', `/api/admin/customers/${c.id}`, formData(e.target)); toast('تم الحفظ ✓'); } catch (ex) { showErr(e.target, ex.message); } };
       return;
@@ -598,7 +636,7 @@
     v.innerHTML = String(h`${head('العملاء', `${num(d.total)} عميل — يُضاف العميل تلقائياً عند أول طلب`, h`<button class="btn" data-csv>⬇ تصدير CSV</button>`)}
       <form class="filters" data-filter><input class="f grow" name="q" placeholder="بحث بالاسم أو الهاتف" value="${f.q}"><select class="f" name="type"><option value="">الكل</option><option value="retail" ${f.type === 'retail' ? 'selected' : ''}>قطاعي</option><option value="wholesale" ${f.type === 'wholesale' ? 'selected' : ''}>تجار جملة</option></select><button class="btn">بحث</button></form>
       ${d.items.length ? h`<div class="tw"><table class="t"><thead><tr><th>العميل</th><th>الهاتف</th><th>المنطقة</th><th>النوع</th><th>الطلبات</th><th>إجمالي المشتريات</th><th>آخر طلب</th></tr></thead><tbody>
-      ${d.items.map((c) => h`<tr class="click" data-go="#/customers/${c.id}"><td><b>${c.name}</b></td><td class="ltr">${c.phone}</td><td class="small">${c.city || ''}</td><td>${c.type === 'wholesale' ? h`<span class="pill p-ws">جملة</span>` : 'قطاعي'}</td><td>${c.orders_count}</td><td class="nowrap">${money(c.total_spent)}</td><td class="small muted">${dt(c.last_order_at, false)}</td></tr>`)}
+      ${d.items.map((c) => h`<tr class="click" data-go="#/customers/${c.id}"><td><b>${c.name}</b>${c.has_account ? h` <span class="pill p-on">حساب</span>` : ''}</td><td class="ltr">${c.phone}</td><td class="small">${c.city || ''}</td><td>${c.type === 'wholesale' ? h`<span class="pill p-ws">جملة</span>` : 'قطاعي'}</td><td>${c.orders_count}</td><td class="nowrap">${money(c.total_spent)}</td><td class="small muted">${dt(c.last_order_at, false)}</td></tr>`)}
       </tbody></table></div>${pager(d.page, d.pages)}` : h`<div class="card empty">لا يوجد عملاء بعد.</div>`}`);
     $('[data-filter]', v).onsubmit = (e) => { e.preventDefault(); setQs('customers', formData(e.target)); };
     $('[data-csv]', v).onclick = () => download('/api/admin/customers.csv');
@@ -761,6 +799,7 @@
             <button type="button" class="btn sm" data-add-zone>+ إضافة منطقة</button>
             <label class="l" style="margin-top:12px">توصيل مجاني للطلبات فوق (د.ل)<input name="free_shipping_over" type="text" inputmode="decimal" autocomplete="off" data-num min="0" value="${s.free_shipping_over || 0}"><small>0 = معطل</small></label></div>
           <div class="card"><h2>طرق الدفع</h2><div class="list-rows" data-pms>${(s.payment_methods || []).map(pmRow)}</div><p class="small muted">فعّل الطرق المتاحة لديك. الدفع الإلكتروني هنا يتم يدوياً (يتواصل معك العميل لإتمام التحويل).</p></div>
+          <div class="card"><h2>👤 حسابات الزبائن</h2><label class="chk"><input type="checkbox" name="require_account" ${s.require_account !== false ? 'checked' : ''}> لازم الزبون يسوّي حساب أو يسجّل دخول قبل الشراء</label><p class="small muted">الحساب يحفظ اسمه ورقمه وعنوانه وفواتيره، والاسم يظهر في الفاتورة ورسالة الواتساب.</p></div>
           <div class="card"><h2>🧾 الفاتورة المطبوعة</h2><div class="fg">
             <label class="l">اسم المحل في الفاتورة<input name="invoice_title" value="${s.invoice_title || ''}"></label>
             <label class="l">جملة - قطاعي<input name="invoice_tagline" value="${s.invoice_tagline || ''}"></label>
