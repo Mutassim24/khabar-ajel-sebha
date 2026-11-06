@@ -14,7 +14,7 @@
   const dt = (iso, time = true) => iso ? new Date(iso).toLocaleString('ar-LY', { timeZone: 'Africa/Tripoli', year: 'numeric', month: 'short', day: 'numeric', ...(time ? { hour: '2-digit', minute: '2-digit' } : {}) }) : '—';
   const STATUS = { new: 'جديد', processing: 'قيد التجهيز', shipped: 'تم الشحن', completed: 'مكتمل', cancelled: 'ملغي' };
   const pill = (s) => h`<span class="pill st-${s}">${STATUS[s] || s}</span>`;
-  const img = (id, w) => (id ? `/media/${id}${w ? '?w=' + w : ''}` : '');
+  const img = (id, w) => (id ? `/media/${id}?v=2${w ? '&w=' + w : ''}` : '');
   const today = () => new Date(Date.now() + 2 * 3600e3).toISOString().slice(0, 10);
   const daysAgo = (n) => new Date(Date.now() - n * 864e5 + 2 * 3600e3).toISOString().slice(0, 10);
 
@@ -49,6 +49,17 @@
     });
   }
   // form helpers
+  // numbers: accept Arabic-Indic digits (٠-٩), Arabic decimal separators (٫ ، ,) and convert as you type
+  const toLatinNum = (v) => String(v).replace(/[٠-٩]/g, (c) => '٠١٢٣٤٥٦٧٨٩'.indexOf(c)).replace(/[۰-۹]/g, (c) => '۰۱۲۳۴۵۶۷۸۹'.indexOf(c)).replace(/[٫،,]/g, '.').replace(/[^\d.\-]/g, '');
+  document.addEventListener('input', (e) => {
+    const el = e.target; if (!el.matches || !el.matches('[data-num]')) return;
+    const v = toLatinNum(el.value);
+    if (v !== el.value) { const pos = el.selectionStart; const diff = el.value.length - v.length; el.value = v; try { el.setSelectionRange(Math.max(0, pos - diff), Math.max(0, pos - diff)); } catch {} }
+    el.classList.toggle('bad', v !== '' && !Number.isFinite(Number(v)));
+  }, true);
+  // tapping a number box selects its content, so typing replaces the old value (no "045" mistakes)
+  document.addEventListener('focusin', (e) => { const el = e.target; if (el.matches && el.matches('[data-num]')) { if (el.value === '0') el.value = ''; try { el.select(); } catch {} } });
+  document.addEventListener('focusout', (e) => { const el = e.target; if (el.matches && el.matches('[data-num]') && el.value === '' && el.dataset.orig === '0') el.value = '0'; });
   function formData(form) {
     const o = {};
     for (const el of form.elements) {
@@ -230,10 +241,10 @@
           <td><input type="checkbox" data-sel="${p.id}"></td>
           <td><a class="pname" href="#/products/${p.id}">${p.image_id ? h`<img class="thumb" src="${img(p.image_id, 160)}" alt="">` : h`<span class="thumb">📦</span>`}<span><b>${p.name}</b><small class="ltr">${p.sku}</small></span></a></td>
           <td class="small">${p.category_name ? h`${p.parent_name ? h`<span class="muted">${p.parent_name} ›</span> ` : ''}${p.category_name}` : h`<span class="muted">—</span>`}</td>
-          <td><input class="inl" type="number" min="0" step="0.01" value="${p.price}" data-inl="price" aria-label="سعر القطاعي">${p.price > 0 ? '' : h`<span class="pill p-low">بدون سعر</span>`}</td>
-          <td><input class="inl" type="number" min="0" step="0.01" value="${p.wholesale_price ?? ''}" data-inl="wholesale_price" placeholder="—" aria-label="سعر الجملة">${p.wholesale_price ? h`<small class="muted">من ${p.wholesale_min_qty}</small>` : ''}</td>
-          <td><input class="inl" type="number" min="0" step="0.01" value="${p.cost_price}" data-inl="cost_price" aria-label="التكلفة"></td>
-          <td><input class="inl" style="width:70px" type="number" min="0" step="1" value="${p.stock}" data-inl="stock" aria-label="المخزون">${p.stock <= 0 ? h`<span class="pill p-out">نفد</span>` : p.stock <= p.low_stock_threshold ? h`<span class="pill p-low">منخفض</span>` : ''}</td>
+          <td><input class="inl" type="text" inputmode="decimal" autocomplete="off" data-num min="0" step="0.01" value="${p.price}" data-inl="price" aria-label="سعر القطاعي">${p.price > 0 ? '' : h`<span class="pill p-low">بدون سعر</span>`}</td>
+          <td><input class="inl" type="text" inputmode="decimal" autocomplete="off" data-num min="0" step="0.01" value="${p.wholesale_price ?? ''}" data-inl="wholesale_price" placeholder="—" aria-label="سعر الجملة">${p.wholesale_price ? h`<small class="muted">من ${p.wholesale_min_qty}</small>` : ''}</td>
+          <td><input class="inl" type="text" inputmode="decimal" autocomplete="off" data-num min="0" step="0.01" value="${p.cost_price}" data-inl="cost_price" aria-label="التكلفة"></td>
+          <td><input class="inl" style="width:70px" type="text" inputmode="decimal" autocomplete="off" data-num min="0" step="1" value="${p.stock}" data-inl="stock" aria-label="المخزون">${p.stock <= 0 ? h`<span class="pill p-out">نفد</span>` : p.stock <= p.low_stock_threshold ? h`<span class="pill p-low">منخفض</span>` : ''}</td>
           <td>${num(p.sold_count)}</td>
           <td class="nowrap"><span class="pill ${p.active ? 'p-on' : 'p-off'}">${p.active ? 'معروض' : 'مخفي'}</span>${p.featured ? h` <span class="pill p-ws">مميز</span>` : ''}${p.compare_at_price > p.price ? h` <span class="pill p-low">خصم</span>` : ''}</td>
           <td class="nowrap"><a class="btn sm" href="#/products/${p.id}">تعديل</a></td>
@@ -246,7 +257,8 @@
     v.addEventListener('change', async (e) => {
       const inp = e.target.closest('[data-inl]'); if (!inp) return;
       const id = inp.closest('tr').dataset.id; const k = inp.dataset.inl;
-      const val = inp.value === '' ? null : Number(inp.value);
+      if (inp.value !== '' && !Number.isFinite(Number(inp.value))) { toast('اكتب رقماً صحيحاً', true); inp.style.color = 'var(--red)'; return; }
+      const val = inp.value === '' ? (k === 'wholesale_price' ? null : 0) : Number(inp.value);
       try { await api('PATCH', `/api/admin/products/${id}`, { [k]: val }); toast('تم الحفظ ✓'); inp.style.color = 'var(--green)'; }
       catch (ex) { fail(ex); inp.style.color = 'var(--red)'; }
     });
@@ -309,18 +321,18 @@
         </div>
         <div class="grid">
           <div class="card"><h2>الأسعار (د.ل)</h2><div class="fg">
-            <label class="l">سعر القطاعي *<input name="price" type="number" min="0" step="0.01" required value="${val(p.price)}"></label>
-            <label class="l">السعر قبل الخصم<input name="compare_at_price" type="number" min="0" step="0.01" value="${val(p.compare_at_price)}"><small>يظهر مشطوباً كعرض</small></label>
-            <label class="l">سعر الجملة<input name="wholesale_price" type="number" min="0" step="0.01" value="${val(p.wholesale_price)}"></label>
-            <label class="l">الجملة من كمية<input name="wholesale_min_qty" type="number" min="1" step="1" value="${val(p.wholesale_min_qty)}"></label>
-            <label class="l full">سعر التكلفة (لحساب الأرباح)<input name="cost_price" type="number" min="0" step="0.01" value="${val(p.cost_price)}"><small>لا يظهر للعملاء</small></label>
+            <label class="l">سعر القطاعي *<input name="price" type="text" inputmode="decimal" autocomplete="off" data-num min="0" step="0.01" required value="${val(p.price)}"></label>
+            <label class="l">السعر قبل الخصم<input name="compare_at_price" type="text" inputmode="decimal" autocomplete="off" data-num min="0" step="0.01" value="${val(p.compare_at_price)}"><small>يظهر مشطوباً كعرض</small></label>
+            <label class="l">سعر الجملة<input name="wholesale_price" type="text" inputmode="decimal" autocomplete="off" data-num min="0" step="0.01" value="${val(p.wholesale_price)}"></label>
+            <label class="l">الجملة من كمية<input name="wholesale_min_qty" type="text" inputmode="decimal" autocomplete="off" data-num min="1" step="1" value="${val(p.wholesale_min_qty)}"></label>
+            <label class="l full">سعر التكلفة (لحساب الأرباح)<input name="cost_price" type="text" inputmode="decimal" autocomplete="off" data-num min="0" step="0.01" value="${val(p.cost_price)}"><small>لا يظهر للعملاء</small></label>
             <div class="calc full" data-calc></div>
           </div></div>
           <div class="card"><h2>المخزون</h2><div class="fg">
-            <label class="l">الكمية المتوفرة<input name="stock" type="number" min="0" step="1" value="${val(p.stock)}"></label>
-            <label class="l">تنبيه عند وصولها إلى<input name="low_stock_threshold" type="number" min="0" step="1" value="${val(p.low_stock_threshold)}"></label>
+            <label class="l">الكمية المتوفرة<input name="stock" type="text" inputmode="decimal" autocomplete="off" data-num min="0" step="1" value="${val(p.stock)}"></label>
+            <label class="l">تنبيه عند وصولها إلى<input name="low_stock_threshold" type="text" inputmode="decimal" autocomplete="off" data-num min="0" step="1" value="${val(p.low_stock_threshold)}"></label>
           </div>
-          ${!isNew ? h`<div style="display:flex;gap:6px;margin-top:10px;flex-wrap:wrap"><input class="f" style="width:90px" type="number" step="1" placeholder="±كمية" data-adj-qty><input class="f" style="flex:1;min-width:120px" placeholder="السبب (توريد، تالف، جرد...)" data-adj-reason><button type="button" class="btn sm" data-adj>تسجيل حركة</button></div>
+          ${!isNew ? h`<div style="display:flex;gap:6px;margin-top:10px;flex-wrap:wrap"><input class="f" style="width:90px" type="text" inputmode="decimal" autocomplete="off" data-num step="1" placeholder="±كمية" data-adj-qty><input class="f" style="flex:1;min-width:120px" placeholder="السبب (توريد، تالف، جرد...)" data-adj-reason><button type="button" class="btn sm" data-adj>تسجيل حركة</button></div>
             <details style="margin-top:10px"><summary class="small" style="cursor:pointer;font-weight:700">سجل حركة المخزون (${p.movements.length})</summary>
             <table class="t small" style="margin-top:6px"><tbody>${p.movements.map((m) => h`<tr><td class="${m.change > 0 ? 'green' : 'red'} ltr"><b>${m.change > 0 ? '+' : ''}${m.change}</b></td><td>${m.reason}${m.ref ? h` <span class="ltr muted">${m.ref}</span>` : ''}</td><td>← ${m.stock_after}</td><td class="muted nowrap">${dt(m.created_at)}</td></tr>`)}</tbody></table></details>` : ''}
           </div>
@@ -418,7 +430,7 @@
       <label class="l">أيقونة (إيموجي)<input name="icon" maxlength="8" value="${c.icon || ''}"></label>
       <div class="l full">صورة القسم<input type="hidden" name="media_id" value="${c.media_id || ''}"><div class="cat-img-row"><span data-cat-prev>${c.media_id ? h`<img src="${img(c.media_id, 160)}" alt="">` : c.cover_id ? h`<img src="${img(c.cover_id, 160)}" alt="" style="opacity:.55">` : '📦'}</span><label class="btn sm">📷 رفع صورة<input type="file" accept="image/*" hidden data-cat-file></label>${c.media_id ? h`<button type="button" class="btn sm" data-cat-rm>إزالة</button>` : ''}</div><small>اتركها فارغة لعرض صورة أول منتج في القسم تلقائياً</small></div>
       <label class="l full">وصف قصير<input name="description" maxlength="200" value="${c.description || ''}"></label>
-      <label class="l">ترتيب الظهور<input name="sort_order" type="number" min="0" value="${c.sort_order ?? 0}"></label>
+      <label class="l">ترتيب الظهور<input name="sort_order" type="text" inputmode="decimal" autocomplete="off" data-num min="0" value="${c.sort_order ?? 0}"></label>
       ${c.id ? h`<label class="l">الرابط<input name="slug" dir="ltr" value="${c.slug}"></label>` : ''}
       <label class="sw full"><input type="checkbox" name="active" ${c.active ? 'checked' : ''}> ظاهر في المتجر</label></div>
       <div class="tools"><button class="btn primary">حفظ</button><button type="button" class="btn" data-close-modal>إلغاء</button></div></form>`, (b) => {
@@ -461,7 +473,7 @@
       <p class="small muted">المنتج اللي سعره 0 يظهر للزبون «السعر عند الطلب». الأسعار بالدينار الليبي، وتقدر تكتب كسور مثل 12.5 (اثنا عشر ديناراً وخمسمائة درهم).</p>
       ${d.items.length ? h`<div class="price-list">${d.items.map((p) => h`<div class="pr card" data-id="${p.id}">
         <a class="pname" href="#/products/${p.id}">${p.image_id ? h`<img class="thumb" src="${img(p.image_id, 160)}" alt="">` : h`<span class="thumb">📦</span>`}<span><b>${p.name}</b><small class="ltr">${p.sku}</small></span></a>
-        <div class="pr-f">${F.map(([k, l]) => h`<label>${l}<input type="number" min="${k === 'wholesale_min_qty' ? 1 : 0}" step="${k === 'stock' || k === 'wholesale_min_qty' ? 1 : 0.001}" inputmode="decimal" data-k="${k}" data-orig="${p[k] ?? ''}" value="${p[k] ?? ''}" placeholder="${k === 'wholesale_price' ? '—' : ''}"></label>`)}</div>
+        <div class="pr-f">${F.map(([k, l]) => h`<label>${l}<input type="text" inputmode="decimal" autocomplete="off" data-num min="${k === 'wholesale_min_qty' ? 1 : 0}" step="${k === 'stock' || k === 'wholesale_min_qty' ? 1 : 0.001}" inputmode="decimal" data-k="${k}" data-orig="${p[k] ?? ''}" value="${p[k] ?? ''}" placeholder="${k === 'wholesale_price' ? '—' : ''}"></label>`)}</div>
       </div>`)}</div><div class="savebar"><button class="btn primary" data-save-all disabled>💾 حفظ الكل</button><span data-dirty class="small muted"></span></div>`
     : h`<div class="card empty">${f.status === 'noprice' ? '✓ كل المنتجات عليها أسعار.' : 'لا توجد منتجات مطابقة.'}</div>`}`);
     $('[data-filter]', v).onsubmit = (e) => { e.preventDefault(); setQs('prices', formData(e.target)); };
@@ -479,9 +491,17 @@
         for (const i of $$('[data-k]', r)) {
           if (i.value === i.dataset.orig) continue;
           if (i.value === '' && i.dataset.k === 'wholesale_min_qty') { i.value = i.dataset.orig; continue; }
+          if (i.value !== '' && !Number.isFinite(Number(i.value))) { i.classList.add('bad'); continue; }
           body[i.dataset.k] = i.value === '' ? (i.dataset.k === 'wholesale_price' ? null : 0) : Number(i.value);
         }
-        try { await api('PATCH', `/api/admin/products/${r.dataset.id}`, body); ok++; $$('[data-k]', r).forEach((i) => { i.dataset.orig = i.value; i.classList.remove('chg'); }); r.classList.add('saved'); }
+        if (!Object.keys(body).length) { bad++; continue; }
+        try {
+          const saved = await api('PATCH', `/api/admin/products/${r.dataset.id}`, body); ok++;
+          $$('[data-k]', r).forEach((i) => { const sv = saved[i.dataset.k]; i.value = sv ?? ''; i.dataset.orig = i.value; i.classList.remove('chg'); });
+          r.classList.add('saved');
+          let st = $('.pr-st', r); if (!st) { st = document.createElement('div'); st.className = 'pr-st'; r.appendChild(st); }
+          st.innerHTML = saved.price > 0 ? `✓ محفوظ — يظهر للزبون بسعر <b>${money(saved.price)}</b>${saved.stock > 0 ? '' : ' <span style="color:#d97706">(الكمية 0 فيظهر «نفد المخزون» — اكتب الكمية المتوفرة)</span>'} · <a href="/product/${encodeURIComponent(saved.slug)}" target="_blank">عرض في المتجر ↗</a>` : '✓ محفوظ — السعر 0 فيظهر «السعر عند الطلب»';
+        }
         catch (ex) { bad++; $$('[data-k]', r).forEach((i) => i.value !== i.dataset.orig && i.classList.add('bad')); r.title = ex.message; toast(`${$('b', r).textContent}: ${ex.message}`, true); }
       }
       refresh(); if (ok) toast(`تم حفظ ${ok} منتج ✓${bad ? ` — ${bad} فيها خطأ (باللون الأحمر)` : ''}`, !!bad);
@@ -598,10 +618,10 @@
     const edit = (c = { type: 'percent', active: 1 }) => modal(c.id ? 'تعديل الكوبون' : 'كوبون جديد', h`<form class="form" novalidate><div class="fg">
       <label class="l">الكود *<input name="code" dir="ltr" required value="${c.code || ''}" placeholder="SEBHA10" style="text-transform:uppercase"></label>
       <label class="l">النوع<select name="type"><option value="percent" ${c.type === 'percent' ? 'selected' : ''}>نسبة مئوية %</option><option value="fixed" ${c.type === 'fixed' ? 'selected' : ''}>مبلغ ثابت د.ل</option></select></label>
-      <label class="l">القيمة *<input name="value" type="number" step="0.01" min="0" required value="${c.value ?? ''}"></label>
-      <label class="l">أقصى خصم (د.ل)<input name="max_discount" type="number" step="0.01" min="0" value="${c.max_discount ?? ''}"><small>للنسبة المئوية فقط</small></label>
-      <label class="l">حد أدنى للطلب (د.ل)<input name="min_order" type="number" step="0.01" min="0" value="${c.min_order || ''}"></label>
-      <label class="l">عدد مرات الاستخدام<input name="usage_limit" type="number" min="1" value="${c.usage_limit ?? ''}" placeholder="غير محدود"></label>
+      <label class="l">القيمة *<input name="value" type="text" inputmode="decimal" autocomplete="off" data-num step="0.01" min="0" required value="${c.value ?? ''}"></label>
+      <label class="l">أقصى خصم (د.ل)<input name="max_discount" type="text" inputmode="decimal" autocomplete="off" data-num step="0.01" min="0" value="${c.max_discount ?? ''}"><small>للنسبة المئوية فقط</small></label>
+      <label class="l">حد أدنى للطلب (د.ل)<input name="min_order" type="text" inputmode="decimal" autocomplete="off" data-num step="0.01" min="0" value="${c.min_order || ''}"></label>
+      <label class="l">عدد مرات الاستخدام<input name="usage_limit" type="text" inputmode="decimal" autocomplete="off" data-num min="1" value="${c.usage_limit ?? ''}" placeholder="غير محدود"></label>
       <label class="l">يبدأ من<input name="starts_at" type="date" value="${toDate(c.starts_at)}"></label>
       <label class="l">ينتهي في<input name="ends_at" type="date" value="${toDate(c.ends_at)}"></label>
       <label class="sw full"><input type="checkbox" name="active" ${c.active ? 'checked' : ''}> مفعّل</label></div>
@@ -664,7 +684,7 @@
       <label class="l">نص الزر<input name="cta_text" maxlength="40" value="${b.cta_text || ''}" placeholder="تسوّق الآن"></label>
       <label class="l">رابط الزر<input name="link" dir="ltr" maxlength="300" value="${b.link || ''}" placeholder="/shop?sale=1"></label>
       <label class="l">اللون<select name="theme">${Object.entries(THEMES).map(([k, l]) => h`<option value="${k}" ${b.theme === k ? 'selected' : ''}>${l}</option>`)}</select></label>
-      <label class="l">الترتيب<input name="sort_order" type="number" min="0" value="${b.sort_order}"></label>
+      <label class="l">الترتيب<input name="sort_order" type="text" inputmode="decimal" autocomplete="off" data-num min="0" value="${b.sort_order}"></label>
       <div class="full"><label class="l">صورة خلفية (اختياري — يُفضَّل 1600×600)<input type="file" accept="image/*" data-file></label><input type="hidden" name="media_id" value="${b.media_id || ''}"><div data-prev>${b.media_id ? h`<img src="${img(b.media_id)}" style="max-height:90px;border-radius:8px;margin-top:6px"> <button type="button" class="btn sm" data-rm-img>إزالة الصورة</button>` : ''}</div></div>
       <label class="sw full"><input type="checkbox" name="active" ${b.active ? 'checked' : ''}> ظاهر</label></div>
       <div class="tools"><button class="btn primary">حفظ</button><button type="button" class="btn" data-close-modal>إلغاء</button></div></form>`, (m) => {
@@ -713,7 +733,7 @@
   routes.settings = async (v) => {
     if (state.me.role !== 'owner') { v.innerHTML = '<div class="card empty">هذه الصفحة لمالك المتجر فقط</div>'; return; }
     const s = await api('GET', '/api/admin/settings');
-    const zoneRow = (z = { name: '', fee: 0 }) => h`<div class="row" data-zone><input class="f" placeholder="اسم المنطقة" value="${z.name}" data-zn><input class="f" type="number" min="0" step="0.5" value="${z.fee}" data-zf aria-label="الرسوم"><button type="button" class="btn sm danger" data-rm>✕</button></div>`;
+    const zoneRow = (z = { name: '', fee: 0 }) => h`<div class="row" data-zone><input class="f" placeholder="اسم المنطقة" value="${z.name}" data-zn><input class="f" type="text" inputmode="decimal" autocomplete="off" data-num min="0" step="0.5" value="${z.fee}" data-zf aria-label="الرسوم"><button type="button" class="btn sm danger" data-rm>✕</button></div>`;
     const pmRow = (m) => h`<div class="row pm" data-pm="${m.id}"><input type="checkbox" ${m.enabled ? 'checked' : ''} data-pe aria-label="تفعيل"><input class="f" value="${m.name}" data-pn><input class="f" value="${m.instructions || ''}" data-pi placeholder="تعليمات للعميل"><span></span></div>`;
     v.innerHTML = String(h`${head('إعدادات المتجر', '')}
       <form class="form" novalidate data-sf>
@@ -739,7 +759,7 @@
           </div></div>
           <div class="card"><h2>مناطق ورسوم التوصيل (د.ل)</h2><div class="list-rows" data-zones>${(s.shipping_zones || []).map((z) => zoneRow(z))}</div>
             <button type="button" class="btn sm" data-add-zone>+ إضافة منطقة</button>
-            <label class="l" style="margin-top:12px">توصيل مجاني للطلبات فوق (د.ل)<input name="free_shipping_over" type="number" min="0" value="${s.free_shipping_over || 0}"><small>0 = معطل</small></label></div>
+            <label class="l" style="margin-top:12px">توصيل مجاني للطلبات فوق (د.ل)<input name="free_shipping_over" type="text" inputmode="decimal" autocomplete="off" data-num min="0" value="${s.free_shipping_over || 0}"><small>0 = معطل</small></label></div>
           <div class="card"><h2>طرق الدفع</h2><div class="list-rows" data-pms>${(s.payment_methods || []).map(pmRow)}</div><p class="small muted">فعّل الطرق المتاحة لديك. الدفع الإلكتروني هنا يتم يدوياً (يتواصل معك العميل لإتمام التحويل).</p></div>
           <div class="card"><h2>🧾 الفاتورة المطبوعة</h2><div class="fg">
             <label class="l">اسم المحل في الفاتورة<input name="invoice_title" value="${s.invoice_title || ''}"></label>

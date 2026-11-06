@@ -185,3 +185,5 @@ label.l textarea{resize:vertical;min-height:80px;line-height:1.7}
 .pr-f input.chg{border-color:#f59e0b;background:#fff8e6;color:#111}.pr-f input.bad{border-color:#dc2626;background:#fdecec;color:#111}
 .savebar{position:sticky;bottom:0;display:flex;gap:12px;align-items:center;padding:12px;background:var(--bg);border-top:1px solid var(--line);margin-top:10px}
 @media (max-width:900px){.pr{grid-template-columns:1fr}.pr-f{grid-template-columns:repeat(2,1fr)}}
+.pr-st{grid-column:1/-1;font-size:13px;font-weight:700;color:#1f9d55}.pr-st a{color:inherit}
+input.bad,.inl.bad{border-color:#dc2626!important;background:#fdecec!important;color:#111!important}

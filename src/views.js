@@ -5,7 +5,8 @@ const { getSettings } = require('./db');
 
 const ASSET_V = process.env.ASSET_VERSION || String(Date.now()).slice(-8);
 const asset = (p) => `${p}?v=${ASSET_V}`;
-const img = (id, w) => (id ? `/media/${id}${w ? '?w=' + w : ''}` : null);
+// ?v= changes when catalog photos are re-processed in place, so browsers fetch the new image
+const img = (id, w) => (id ? `/media/${id}?v=2${w ? '&w=' + w : ''}` : null);
 
 function siteUrl(req) {
   const s = getSettings();
