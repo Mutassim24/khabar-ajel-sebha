@@ -3,9 +3,9 @@
 body{margin:0;background:#e9edf3;font-family:Cairo,system-ui,sans-serif;color:#111;-webkit-print-color-adjust:exact;print-color-adjust:exact}
 .bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:center;padding:10px;background:#0f2240}
 .bar a,.bar button{font:700 14px Cairo,sans-serif;border:0;border-radius:10px;padding:9px 14px;background:#fff;color:#0f2240;text-decoration:none;cursor:pointer}
-.bar button[data-print]{background:#ff7a1a;color:#fff}.bar button[data-save]{background:#1f9d55;color:#fff}
+.bar button[data-print]{background:#ff7a1a;color:#fff}.bar button.share{background:#25d366;color:#fff}.bar button[data-save]{background:#1f9d55;color:#fff}
 .bar .msg{color:#fff;font-weight:700}
-.inv{width:min(760px,100%);margin:16px auto;background:#fff;padding:22px 22px 16px;border-radius:6px;box-shadow:0 6px 30px #0f224026}
+.inv{width:780px;transform-origin:top center;margin:16px auto;background:#fff;padding:22px 22px 16px;border-radius:6px;box-shadow:0 6px 30px #0f224026}
 .top{display:flex;justify-content:space-between;align-items:flex-start;gap:16px}
 .shop h1{margin:0;font-size:38px;font-weight:900;letter-spacing:2px;line-height:1.2}
 .shop .sub{margin:4px 0 0;font-weight:700;font-size:15px}.shop .tag{margin:0;font-weight:700;font-size:15px;text-align:center}
@@ -45,16 +45,6 @@ body{margin:0;background:#e9edf3;font-family:Cairo,system-ui,sans-serif;color:#1
 .phones{font:800 17px/1.6 Arial,sans-serif}.phones span{font-family:Cairo,sans-serif;font-size:15px}
 .sign{font-weight:800;text-align:center;min-width:200px}.sign i{display:block;border-top:1.5px solid #111;margin-top:26px}
 .meta{margin:12px 0 0;color:#5b6573;font-size:12px}
-@media (max-width:640px){
-  .inv{padding:12px;margin:0;border-radius:0}
-  .shop h1{font-size:28px}.brands span{font-size:15px}.brands span:first-child{font-size:20px}
-  .row2{grid-template-columns:1fr auto}.num b{font-size:18px}.addr{grid-column:1/-1;font-size:14px}
-  .who{grid-template-columns:auto 1fr}.who .plain{grid-column:1}
-  .items{font-size:12px}.items col.c-m{width:24px}.items col.c-q{width:40px}.items col.c-d{width:48px}.items col.c-h{width:38px}
-  .items td{font-size:11.5px;padding:2px 3px}.items thead th{font-size:12px}
-  .sums{grid-template-columns:1fr}
-  .foot{flex-direction:column;align-items:stretch}.phones{font-size:14px}
-}
 @media print{
   @page{size:A4;margin:10mm}
   body{background:#fff}.no-print{display:none!important}
@@ -62,3 +52,4 @@ body{margin:0;background:#e9edf3;font-family:Cairo,system-ui,sans-serif;color:#1
   .totals input{background:transparent}
 }
 .fld .ph{margin-inline-start:auto;font-weight:600;color:#333}
+body{overflow-x:hidden}@media print{.inv{zoom:1!important}}

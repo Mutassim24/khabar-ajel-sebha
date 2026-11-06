@@ -244,7 +244,7 @@
           <td><input class="inl" type="text" inputmode="decimal" autocomplete="off" data-num min="0" step="0.01" value="${p.price}" data-inl="price" aria-label="سعر القطاعي">${p.price > 0 ? '' : h`<span class="pill p-low">بدون سعر</span>`}</td>
           <td><input class="inl" type="text" inputmode="decimal" autocomplete="off" data-num min="0" step="0.01" value="${p.wholesale_price ?? ''}" data-inl="wholesale_price" placeholder="—" aria-label="سعر الجملة">${p.wholesale_price ? h`<small class="muted">من ${p.wholesale_min_qty}</small>` : ''}</td>
           <td><input class="inl" type="text" inputmode="decimal" autocomplete="off" data-num min="0" step="0.01" value="${p.cost_price}" data-inl="cost_price" aria-label="التكلفة"></td>
-          <td><input class="inl" style="width:70px" type="text" inputmode="decimal" autocomplete="off" data-num min="0" step="1" value="${p.stock}" data-inl="stock" aria-label="المخزون">${p.stock <= 0 ? h`<span class="pill p-out">نفد</span>` : p.stock <= p.low_stock_threshold ? h`<span class="pill p-low">منخفض</span>` : ''}</td>
+          <td>${state.me.track_stock ? h`<input class="inl" style="width:70px" type="text" inputmode="decimal" autocomplete="off" data-num value="${p.stock}" data-inl="stock" aria-label="المخزون">${p.stock <= 0 ? h`<span class="pill p-out">نفد</span>` : p.stock <= p.low_stock_threshold ? h`<span class="pill p-low">منخفض</span>` : ''}` : h`<span class="muted">غير محدود</span>`}</td>
           <td>${num(p.sold_count)}</td>
           <td class="nowrap"><span class="pill ${p.active ? 'p-on' : 'p-off'}">${p.active ? 'معروض' : 'مخفي'}</span>${p.featured ? h` <span class="pill p-ws">مميز</span>` : ''}${p.compare_at_price > p.price ? h` <span class="pill p-low">خصم</span>` : ''}</td>
           <td class="nowrap"><a class="btn sm" href="#/products/${p.id}">تعديل</a></td>
@@ -328,7 +328,7 @@
             <label class="l full">سعر التكلفة (لحساب الأرباح)<input name="cost_price" type="text" inputmode="decimal" autocomplete="off" data-num min="0" step="0.01" value="${val(p.cost_price)}"><small>لا يظهر للعملاء</small></label>
             <div class="calc full" data-calc></div>
           </div></div>
-          <div class="card"><h2>المخزون</h2><div class="fg">
+          <div class="card" ${state.me.track_stock ? '' : raw('hidden')}><h2>المخزون</h2><div class="fg">
             <label class="l">الكمية المتوفرة<input name="stock" type="text" inputmode="decimal" autocomplete="off" data-num min="0" step="1" value="${val(p.stock)}"></label>
             <label class="l">تنبيه عند وصولها إلى<input name="low_stock_threshold" type="text" inputmode="decimal" autocomplete="off" data-num min="0" step="1" value="${val(p.low_stock_threshold)}"></label>
           </div>
@@ -469,7 +469,7 @@
     const order = cats.filter((c) => !c.parent_id).map((c) => c.name);
     const names = [...groups.keys()].sort((a, b) => (order.indexOf(a) + 1 || 999) - (order.indexOf(b) + 1 || 999));
     const active = f.cat && groups.has(f.cat) ? f.cat : '';
-    const F = [['price', 'سعر القطاعي *'], ['wholesale_price', 'سعر الجملة'], ['wholesale_min_qty', 'الجملة من كمية'], ['cost_price', 'التكلفة'], ['stock', 'الكمية المتوفرة']];
+    const F = [['price', 'سعر القطاعي *'], ['wholesale_price', 'سعر الجملة'], ['wholesale_min_qty', 'الجملة من كمية'], ['cost_price', 'التكلفة'], ...(state.me.track_stock ? [['stock', 'الكمية المتوفرة']] : [])];
     const val = (x) => (x === null || x === undefined ? '' : String(x));
     const card = (p) => h`<div class="pc" data-id="${p.id}">
         <div class="pc-top">${p.image_id ? h`<img src="${img(p.image_id, 160)}" alt="" loading="lazy">` : h`<span class="ph">📦</span>`}<div><a href="#/products/${p.id}">${p.name}</a><small class="ltr">${p.sku}${p.category_name && p.parent_name ? ' · ' + p.category_name : ''}</small></div></div>
@@ -483,7 +483,7 @@
         <button class="btn">بحث</button>
       </form>
       <div class="cat-tabs"><a href="#" data-tab="" class="${active ? '' : 'on'}">الكل <b>${num(d.total)}</b></a>${names.map((n) => h`<a href="#" data-tab="${n}" class="${active === n ? 'on' : ''}">${n} <b>${groups.get(n).length}</b></a>`)}</div>
-      <p class="small muted hint">اكتب السعر بالدينار (مثال: 25 أو 12.5)، والأرقام العربية مقبولة. <b>سعر الجملة لازم يكون أقل من سعر القطاعي.</b> واكتب <b>الكمية المتوفرة</b> عشان الزبون يقدر يشتري. المنتج اللي سعره 0 يظهر «السعر عند الطلب».</p>
+      <p class="small muted hint">اكتب السعر بالدينار (مثال: 25 أو 12.5)، والأرقام العربية مقبولة. <b>سعر الجملة لازم يكون أقل من سعر القطاعي.</b> ${state.me.track_stock ? raw('واكتب <b>الكمية المتوفرة</b> عشان الزبون يقدر يشتري.') : 'الكمية غير محدودة.'} المنتج اللي سعره 0 يظهر «السعر عند الطلب».</p>
       ${d.items.length ? h`${names.map((n) => h`<section class="pgroup" data-group="${n}" ${active && active !== n ? raw('hidden') : ''}><h2>${n} <small>${groups.get(n).length} منتج</small></h2><div class="pgrid">${groups.get(n).map(card)}</div></section>`)}
         <div class="savebar"><button class="btn primary" data-save-all disabled>💾 حفظ الكل</button><span data-dirty class="small muted"></span></div>`
       : h`<div class="card empty">${f.status === 'noprice' ? '✓ كل المنتجات عليها أسعار.' : 'لا توجد منتجات مطابقة.'}</div>`}`);
@@ -533,7 +533,7 @@
           const saved = await api('PATCH', `/api/admin/products/${c.dataset.id}`, body); if (valid) ok++;
           for (const i of $$('[data-k]', c)) if (i.dataset.k in body) { i.value = val(saved[i.dataset.k]); i.dataset.orig = i.value; i.classList.remove('chg'); }
           $('[data-st]', c).innerHTML = saved.price > 0
-            ? `<span class="ok">✓ محفوظ — ${money(saved.price)}</span>${saved.stock > 0 ? '' : ' <span class="warn">الكمية 0 = «نفد المخزون»</span>'} <a href="/product/${encodeURIComponent(saved.slug)}" target="_blank">عرض ↗</a>`
+            ? `<span class="ok">✓ محفوظ — ${money(saved.price)}</span>${saved.stock > 0 || !state.me.track_stock ? '' : ' <span class="warn">الكمية 0 = «نفد المخزون»</span>'} <a href="/product/${encodeURIComponent(saved.slug)}" target="_blank">عرض ↗</a>`
             : '<span class="warn">✓ محفوظ — السعر 0 = «السعر عند الطلب»</span>';
           c.classList.add('saved');
         } catch (ex) { bad++; $('[data-st]', c).innerHTML = `<span class="bad">✗ ${ex.message}</span>`; }
@@ -799,6 +799,10 @@
             <button type="button" class="btn sm" data-add-zone>+ إضافة منطقة</button>
             <label class="l" style="margin-top:12px">توصيل مجاني للطلبات فوق (د.ل)<input name="free_shipping_over" type="text" inputmode="decimal" autocomplete="off" data-num min="0" value="${s.free_shipping_over || 0}"><small>0 = معطل</small></label></div>
           <div class="card"><h2>طرق الدفع</h2><div class="list-rows" data-pms>${(s.payment_methods || []).map(pmRow)}</div><p class="small muted">فعّل الطرق المتاحة لديك. الدفع الإلكتروني هنا يتم يدوياً (يتواصل معك العميل لإتمام التحويل).</p></div>
+          <div class="card"><h2>📦 المخزون والاستلام</h2>
+            <label class="chk"><input type="checkbox" name="track_stock" ${s.track_stock === true ? 'checked' : ''}> متابعة الكمية المتوفرة (لو مش معلّم: الكمية غير محدودة)</label>
+            <label class="chk"><input type="checkbox" name="delivery_enabled" ${s.delivery_enabled === true ? 'checked' : ''}> عندنا خدمة توصيل (لو مش معلّم: الاستلام من المحل فقط)</label>
+            <label class="l" style="margin-top:8px">نص الاستلام من المحل<input name="pickup_label" value="${s.pickup_label || ''}"></label></div>
           <div class="card"><h2>👤 حسابات الزبائن</h2><label class="chk"><input type="checkbox" name="require_account" ${s.require_account !== false ? 'checked' : ''}> لازم الزبون يسوّي حساب أو يسجّل دخول قبل الشراء</label><p class="small muted">الحساب يحفظ اسمه ورقمه وعنوانه وفواتيره، والاسم يظهر في الفاتورة ورسالة الواتساب.</p></div>
           <div class="card"><h2>🧾 الفاتورة المطبوعة</h2><div class="fg">
             <label class="l">اسم المحل في الفاتورة<input name="invoice_title" value="${s.invoice_title || ''}"></label>

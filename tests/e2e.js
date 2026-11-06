@@ -26,7 +26,7 @@ async function req(method, url, body, headers = {}) {
 
 (async () => {
   const srv = spawn(process.execPath, [path.join(__dirname, '..', 'server.js')], {
-    env: { REQUIRE_ACCOUNT: 'false',  ...process.env, PORT, DATA_DIR: DATA, SEED_SAMPLE_PRODUCTS: 'true', SEED_CATALOG: 'false', ADMIN_EMAIL: ADMIN.email, ADMIN_PASSWORD: ADMIN.password, NODE_ENV: 'test' }, stdio: ['ignore', 'pipe', 'pipe'],
+    env: { REQUIRE_ACCOUNT: 'false', TRACK_STOCK: 'true', DELIVERY: 'true', ...process.env, PORT, DATA_DIR: DATA, SEED_SAMPLE_PRODUCTS: 'true', SEED_CATALOG: 'false', ADMIN_EMAIL: ADMIN.email, ADMIN_PASSWORD: ADMIN.password, NODE_ENV: 'test' }, stdio: ['ignore', 'pipe', 'pipe'],
   });
   let log = ''; srv.stdout.on('data', (d) => (log += d)); srv.stderr.on('data', (d) => (log += d));
   for (let i = 0; i < 50; i++) { try { if ((await fetch(BASE + '/healthz')).ok) break; } catch {} await new Promise((r) => setTimeout(r, 100)); }
@@ -246,7 +246,7 @@ async function req(method, url, body, headers = {}) {
       await shot(page, 'mobile-checkout');
       await page.click('[data-submit]'); await page.waitForURL(/\/order\//);
       assert.match(await page.textContent('h1'), /تم استلام طلبك/);
-      assert.ok(await page.$('a.btn.wa[href*="wa.me/218925550000"]'), 'whatsapp button');
+      assert.ok(await page.$('[data-inv-share]'), 'invoice share button'); assert.ok(await page.$('#inv-data[data-wa*="218925550000"]'), 'shop whatsapp number');
       await shot(page, 'mobile-order-success');
       assert.equal(await page.evaluate(() => localStorage.getItem('ka_cart')), '[]');
     });

@@ -318,15 +318,15 @@
         [f.name, !f.name || f.name.value.trim().length >= 2, 'يرجى إدخال الاسم الكامل'],
         [f.phone, phoneDigits.length >= 9, 'يرجى إدخال رقم هاتف صحيح'],
         [f.zone, f.zone.value !== '', 'يرجى اختيار منطقة التوصيل'],
-        [f.address, f.address.value.trim().length >= 3, 'يرجى إدخال العنوان بالتفصيل'],
+        [f.address, !f.address || f.address.value.trim().length >= 3, 'يرجى إدخال العنوان بالتفصيل'],
       ];
       for (const [el, ok, m] of checks) if (!ok) { el.classList.add('invalid'); el.focus(); return showErr(m); }
       if (!cart.length) return showErr('السلة فارغة');
       const btn = $('[data-submit]'); const label = btn.innerHTML; btn.disabled = true; btn.textContent = 'جارِ حفظ الفاتورة...';
-      const body = { name: f.name ? f.name.value : '', phone: f.phone ? f.phone.value : '', zone: Number(f.zone.value), address: f.address.value, notes: f.notes.value, payment_method: (co.querySelector('[name=payment_method]:checked') || {}).value, coupon: f.coupon.value.trim(), website: f.website.value, items: cart };
+      const body = { name: f.name ? f.name.value : '', phone: f.phone ? f.phone.value : '', zone: Number(f.zone.value), address: f.address ? f.address.value : '', notes: f.notes.value, payment_method: (co.querySelector('[name=payment_method]:checked') || {}).value, coupon: f.coupon.value.trim(), website: f.website.value, items: cart };
       try {
         const r = await api('/api/orders', body);
-        store.set('ka_customer', { name: body.name, phone: body.phone, address: body.address, zone: f.zone.value });
+        if (f.address) store.set('ka_customer', { name: body.name, phone: body.phone, address: body.address, zone: f.zone.value });
         cart = []; saveCart();
         location.href = r.url;
       } catch (ex) {
@@ -345,7 +345,7 @@
     try { history.replaceState(null, '', location.pathname + location.search.replace(/[?&]send=1/, '').replace(/^&/, '?')); } catch {}
     const nums = (document.body.dataset.whatsapp || '').split(',').filter(Boolean);
     auto.classList.add('pulse'); auto.scrollIntoView({ block: 'center' });
-    if (nums.length > 1) openWhatsApp(auto.dataset.waText); // the number chooser is a dialog, no popup blocker
+    void nums;
   }
 
   // ---------- customer account ----------

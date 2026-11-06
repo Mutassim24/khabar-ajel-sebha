@@ -13,7 +13,7 @@ const j = async (u, opt) => (await fetch(BASE + u, opt)).json();
 const q = (s) => encodeURIComponent(s);
 
 (async () => {
-  const srv = spawn(process.execPath, [path.join(__dirname, '..', 'server.js')], { env: { ...process.env, PORT, DATA_DIR: DATA, ADMIN_EMAIL: 'o@t.ly', ADMIN_PASSWORD: 'Owner-Pass-2026' }, stdio: 'ignore' });
+  const srv = spawn(process.execPath, [path.join(__dirname, '..', 'server.js')], { env: { ...process.env, PORT, DATA_DIR: DATA, ADMIN_EMAIL: 'o@t.ly', ADMIN_PASSWORD: 'Owner-Pass-2026' }, stdio: process.env.DBG ? 'inherit' : 'ignore' });
   for (let i = 0; i < 60; i++) { try { if ((await fetch(BASE + '/healthz')).ok) break; } catch {} await new Promise((r) => setTimeout(r, 100)); }
 
   let CUST = '';
@@ -150,16 +150,16 @@ const q = (s) => encodeURIComponent(s);
     assert.equal((await fetch(`${BASE}/api/admin/products/${p1.id}`, { method: 'PATCH', headers: H, body: JSON.stringify({ price: 12.5, stock: 10, wholesale_price: 10, wholesale_min_qty: 5 }) })).status, 200);
     assert.equal((await fetch(`${BASE}/api/admin/products/${p2.id}`, { method: 'PATCH', headers: H, body: JSON.stringify({ price: 40, stock: 3 }) })).status, 200);
     const o = await (await fetch(BASE + '/api/orders', { method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: CUST }, body: JSON.stringify({ name: 'زبون تجربة', phone: '0912345678', zone: 0, address: 'سبها', payment_method: 'cod', items: [{ id: p1.id, qty: 6 }, { id: p2.id, qty: 2 }] }) })).json();
-    assert.equal(o.total, 6 * 10 + 2 * 40 + 10);
+    assert.equal(o.total, 6 * 10 + 2 * 40, 'pickup from the shop: no delivery fee');
     assert.equal((await fetch(`${BASE}/invoice/${o.number}`)).status, 404, 'no token, no admin');
     const html = await (await fetch(`${BASE}/invoice/${o.number}?t=${o.token}`)).text();
-    assert.match(html, /فقط مائة وخمسون ديناراً لا غير/); assert.match(html, /زبون تجربة/); assert.match(html, /رسوم التوصيل/); assert.match(html, />6</); assert.match(html, /سبها - بالقرب من شركة لبيانا/);
-    assert.equal((html.match(/<tr class="empty">/g) || []).length, 17, '20 rows like the paper');
+    assert.match(html, /فقط مائة وأربعون ديناراً لا غير/); assert.match(html, /زبون تجربة/); assert.doesNotMatch(html, /رسوم التوصيل/); assert.match(html, />6</); assert.match(html, /سبها - بالقرب من شركة لبيانا/);
+    assert.equal((html.match(/<tr class="empty">/g) || []).length, 18, '20 rows like the paper');
     const id = (await (await fetch(`${BASE}/api/admin/orders?q=${o.number}`, { headers: H })).json()).items[0].id;
     assert.equal((await fetch(`${BASE}/api/admin/orders/${id}/invoice`, { method: 'PATCH', headers: H, body: JSON.stringify({ paid_amount: 100, payment_terms: 'credit' }) })).status, 200);
     assert.equal((await fetch(`${BASE}/api/admin/orders/${id}/invoice`, { method: 'PATCH', headers: H, body: JSON.stringify({ paid_amount: 1000 }) })).status, 400);
     const adm = await (await fetch(`${BASE}/invoice/${o.number}`, { headers: { Cookie: cookie } })).text();
-    assert.match(adm, /data-remaining>50 د.ل/); assert.match(adm, /value="credit" checked/);
+    assert.match(adm, /data-remaining>40 د.ل/); assert.match(adm, /value="credit" checked/);
     const acc = await (await fetch(BASE + '/account', { headers: { Cookie: CUST } })).text(); assert.ok(acc.includes(o.number), 'order listed in my account');
     const cu = (await (await fetch(`${BASE}/api/admin/customers`, { headers: H })).json()).items.find((c) => c.phone === '0912345678');
     assert.ok(cu.has_account && !('password_hash' in cu), 'admin sees account flag, never the hash');

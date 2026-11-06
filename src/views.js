@@ -3,6 +3,9 @@
 const { html, raw, esc, money, STATUS } = require('./util');
 const { getSettings } = require('./db');
 const { currentCustomer } = require('./auth');
+const { invoiceData, waNumbers } = require('./invoice');
+const tracksStock = () => process.env.TRACK_STOCK === 'true' || getSettings().track_stock === true;
+const delivers = () => process.env.DELIVERY === 'true' || getSettings().delivery_enabled === true;
 
 const ASSET_V = process.env.ASSET_VERSION || String(Date.now()).slice(-8);
 const asset = (p) => `${p}?v=${ASSET_V}`;
@@ -224,7 +227,7 @@ function home(req, d) {
   const body = html`<div class="wrap">
 ${bannerSlides(d.banners)}
 <section class="perks">
-  <div><span>🚚</span><p><b>توصيل لكل ليبيا</b><small>داخل سبها خلال 24 ساعة</small></p></div>
+  ${delivers() ? html`<div><span>🚚</span><p><b>توصيل لكل ليبيا</b><small>داخل سبها خلال 24 ساعة</small></p></div>` : html`<div><span>📍</span><p><b>الاستلام من المحل</b><small>${getSettings().invoice_address || 'سبها'}</small></p></div>`}
   <div><span>💵</span><p><b>الدفع عند الاستلام</b><small>ومحافظ إلكترونية وتحويل</small></p></div>
   <div><span>🏷️</span><p><b>جملة وقطاعي</b><small>سعر الجملة يُطبَّق تلقائياً</small></p></div>
   <div><span>🔁</span><p><b>استبدال مضمون</b><small>للعيوب المصنعية</small></p></div>
@@ -277,7 +280,7 @@ function shop(req, d) {
           <div class="price-range"><input type="number" name="min" min="0" step="1" inputmode="numeric" placeholder="من" value="${f.min ?? ''}" aria-label="أقل سعر"><span>—</span><input type="number" name="max" min="0" step="1" inputmode="numeric" placeholder="إلى" value="${f.max ?? ''}" aria-label="أعلى سعر"></div>
         </fieldset>
         <fieldset><legend>التوفر والعروض</legend>
-          <label class="check"><input type="checkbox" name="stock" value="1" ${f.inStock ? 'checked' : ''}> المتوفر فقط</label>
+          ${tracksStock() ? html`<label class="check"><input type="checkbox" name="stock" value="1" ${f.inStock ? 'checked' : ''}> المتوفر فقط</label>` : ''}
           <label class="check"><input type="checkbox" name="sale" value="1" ${f.sale ? 'checked' : ''}> عليها خصم</label>
           <label class="check"><input type="checkbox" name="wholesale" value="1" ${f.wholesale ? 'checked' : ''}> متاح بسعر الجملة</label>
           <label class="check"><input type="checkbox" name="featured" value="1" ${f.featured ? 'checked' : ''}> المنتجات المميزة</label>
@@ -368,8 +371,8 @@ function productPage(req, p, related) {
     <div class="buy-extra">
       ${s.whatsapp ? html`<button class="btn wa block lg" type="button" data-wa-product="${p.name}" data-wa-sku="${p.sku}" data-wa-url="/product/${p.slug}" data-wa-ask>${icons.wa} اطلب أو اسأل عن السعر عبر واتساب</button>` : html`<a class="btn primary block lg" href="/page/contact">تواصل معنا لمعرفة السعر</a>`}
       <button class="btn ghost block fav-lg" type="button" data-fav="${p.id}" aria-label="أضف إلى المفضلة" aria-pressed="false">${icons.heart} أضف إلى المفضلة</button>
-    </div>` : html`<div class="buy" data-product="${p.id}" data-max="${p.stock}" data-retail="${p.price}" data-ws="${p.has_wholesale ? p.wholesale_price : ''}" data-ws-min="${p.wholesale_min_qty}">
-      <div class="qty" role="group" aria-label="الكمية"><button type="button" data-step="1" aria-label="زيادة">+</button><input type="number" value="1" min="1" max="${Math.max(1, p.stock)}" inputmode="numeric" aria-label="الكمية" data-qty><button type="button" data-step="-1" aria-label="إنقاص">−</button></div>
+    </div>` : html`<div class="buy" data-product="${p.id}" data-max="${p.max_qty}" data-retail="${p.price}" data-ws="${p.has_wholesale ? p.wholesale_price : ''}" data-ws-min="${p.wholesale_min_qty}">
+      <div class="qty" role="group" aria-label="الكمية"><button type="button" data-step="1" aria-label="زيادة">+</button><input type="number" value="1" min="1" max="${Math.max(1, p.max_qty)}" inputmode="numeric" aria-label="الكمية" data-qty><button type="button" data-step="-1" aria-label="إنقاص">−</button></div>
       <button class="btn primary grow" type="button" data-add-qty="${p.id}" ${a.key === 'out' ? 'disabled' : ''}>${icons.cart} ${a.key === 'out' ? 'نفد المخزون' : 'أضف إلى السلة'}</button>
       <button class="btn icon fav-lg" type="button" data-fav="${p.id}" aria-label="أضف إلى المفضلة" aria-pressed="false">${icons.heart}</button>
     </div>
@@ -378,7 +381,7 @@ function productPage(req, p, related) {
       ${a.key !== 'out' ? html`<button class="btn dark block" type="button" data-buy-now="${p.id}">اشترِ الآن</button>` : ''}
       ${s.whatsapp ? html`<button class="btn wa block" type="button" data-wa-product="${p.name}" data-wa-sku="${p.sku}" data-wa-url="/product/${p.slug}">${icons.wa} اطلب أو اسأل عبر واتساب</button>` : ''}
     </div>`}
-    <ul class="assure"><li>🚚 توصيل لجميع المدن الليبية</li><li>💵 الدفع عند الاستلام</li><li>🔁 استبدال للعيوب المصنعية</li></ul>
+    <ul class="assure">${delivers() ? html`<li>🚚 توصيل لجميع المدن الليبية</li>` : html`<li>📍 الاستلام من المحل في سبها</li>`}<li>💵 الدفع نقداً عند الاستلام</li><li>🔁 استبدال للعيوب المصنعية</li></ul>
   </div>
 </div>
 ${p.description ? html`<section class="block prose-box"><h2>وصف المنتج</h2><div class="prose">${md(p.description)}</div></section>` : ''}
@@ -400,7 +403,7 @@ function cartPage(req) {
     <h2>ملخص الطلب</h2>
     <div class="row"><span>المجموع</span><b data-cart-subtotal>0 د.ل</b></div>
     <p class="hint" data-cart-savings hidden></p>
-    <p class="muted small">تُحسب رسوم التوصيل وكود الخصم في الخطوة التالية.</p>
+    <p class="muted small">${delivers() ? 'تُحسب رسوم التوصيل وكود الخصم في الخطوة التالية.' : 'الاستلام من المحل، ويُطبَّق كود الخصم في الخطوة التالية.'}</p>
     <a class="btn primary block" href="/checkout" data-checkout-link>🧾 عرض الفاتورة والشراء</a>
     <a class="btn ghost block" href="/shop">متابعة التسوق</a>
   </aside>
@@ -412,6 +415,7 @@ function checkoutPage(req, cust) {
   const s = getSettings();
   const methods = (s.payment_methods || []).filter((m) => m.enabled);
   const zones = s.shipping_zones || [];
+  const pickup = !delivers();
   const body = html`<div class="wrap">
 <nav class="crumbs"><a href="/">الرئيسية</a><span>/</span><a href="/cart">السلة</a><span>/</span><b>الفاتورة والشراء</b></nav>
 <h1 class="page-title">🧾 الفاتورة وإتمام الشراء</h1>
@@ -423,24 +427,24 @@ function checkoutPage(req, cust) {
     <div class="inv-sums">
       <div class="row"><span>المجموع</span><b data-co="subtotal">—</b></div>
       <div class="row" data-co-row="discount" hidden><span>الخصم</span><b class="green" data-co="discount">—</b></div>
-      <div class="row"><span>التوصيل</span><b data-co="shipping">اختر المنطقة</b></div>
+      ${pickup ? '' : html`<div class="row"><span>التوصيل</span><b data-co="shipping">اختر المنطقة</b></div>`}
       <div class="row total"><span>الإجمالي</span><b data-co="total">—</b></div>
       <p class="words" data-co="words"></p>
     </div>
     <p class="small center"><a href="/shop" style="color:var(--blue)">+ إضافة منتجات أخرى</a></p>
   </section>
   <aside class="panel co-side">
-    <h2><span class="step">1</span> التوصيل</h2>
+    <h2><span class="step">1</span> ${pickup ? 'الاستلام' : 'التوصيل'}</h2>
     <div class="fields one">
       ${cust ? '' : html`<label>الاسم الكامل *<input name="name" required maxlength="80" autocomplete="name"></label><label>رقم الهاتف *<input name="phone" required inputmode="tel" dir="ltr"></label>`}
-      <label>منطقة التوصيل *
+      ${pickup ? html`<div class="pickup-box"><b>📍 الاستلام من المحل</b><span>${s.pickup_label || s.invoice_address}</span><small>نجهّز طلبك ونتواصل معك لما يكون جاهز للاستلام.</small><input type="hidden" name="zone" value="0"></div>` : html`<label>منطقة التوصيل *
         <select name="zone" required>
           <option value="">اختر المنطقة</option>
           ${zones.map((z, i) => html`<option value="${i}" ${cust && cust.city === z.name ? raw('selected') : ''}>${z.name} — ${Number(z.fee) ? money(z.fee) : 'مجاناً'}</option>`)}
         </select>
       </label>
-      <label>العنوان بالتفصيل *<textarea name="address" required maxlength="300" rows="2" placeholder="الحي، الشارع، أقرب معلم">${cust ? cust.address || '' : ''}</textarea></label>
-      <label>ملاحظات (اختياري)<textarea name="notes" maxlength="500" rows="2" placeholder="موديل الهاتف، وقت التوصيل..."></textarea></label>
+      <label>العنوان بالتفصيل *<textarea name="address" required maxlength="300" rows="2" placeholder="الحي، الشارع، أقرب معلم">${cust ? cust.address || '' : ''}</textarea></label>`}
+      <label>ملاحظات (اختياري)<textarea name="notes" maxlength="500" rows="2" placeholder="${pickup ? 'موديل الهاتف، وقت الاستلام المناسب...' : 'موديل الهاتف، وقت التوصيل...'}"></textarea></label>
       <label class="hp" aria-hidden="true">Website<input name="website" tabindex="-1" autocomplete="off"></label>
     </div>
     <h2><span class="step">2</span> طريقة الدفع</h2>
@@ -464,7 +468,7 @@ function authPage(req, { mode, next }) {
 <div class="panel auth-box">
   <div class="auth-tabs"><a href="/account/login?next=${encodeURIComponent(next)}" class="${reg ? '' : 'on'}">تسجيل الدخول</a><a href="/account/register?next=${encodeURIComponent(next)}" class="${reg ? 'on' : ''}">إنشاء حساب جديد</a></div>
   <h1>${reg ? 'أنشئ حسابك' : 'أهلاً بك من جديد'}</h1>
-  <p class="muted">${reg ? `حسابك في ${s.store_name} يحفظ بياناتك وفواتيرك ويخليك تشتري بسرعة.` : 'ادخل برقم هاتفك وكلمة المرور.'}</p>
+  <p class="muted">${reg ? `حسابك في ${s.store_name} يحفظ بياناتك وفواتيرك ويخليك تشتري بسرعة.` : 'سجّل دخولك برقم هاتفك وكلمة المرور.'}</p>
   <form id="authForm" data-mode="${mode}" data-next="${next}" novalidate class="fields one">
     ${reg ? html`<label>الاسم الكامل *<input name="name" required maxlength="80" autocomplete="name" placeholder="مثال: محمد علي"></label>` : ''}
     <label>رقم الهاتف *<input name="phone" required inputmode="tel" autocomplete="tel" dir="ltr" placeholder="09X XXX XXXX"></label>
@@ -490,7 +494,7 @@ ${orders.length ? html`<div class="acc-orders">${orders.map((o) => html`<div cla
 <section class="panel"><h2>بياناتي</h2>
   <form id="profileForm" class="fields" novalidate>
     <label>الاسم *<input name="name" required maxlength="80" value="${c.name}"></label>
-    <label>المدينة / المنطقة<select name="city"><option value="">—</option>${(s.shipping_zones || []).map((z) => html`<option ${c.city === z.name ? raw('selected') : ''}>${z.name}</option>`)}</select></label>
+    ${delivers() ? html`<label>المدينة / المنطقة<select name="city"><option value="">—</option>${(s.shipping_zones || []).map((z) => html`<option ${c.city === z.name ? raw('selected') : ''}>${z.name}</option>`)}</select></label>` : ''}
     <label class="full">العنوان<textarea name="address" rows="2" maxlength="300">${c.address || ''}</textarea></label>
     <p class="form-error full" data-form-error hidden></p>
     <button class="btn primary" type="submit">حفظ البيانات</button>
@@ -510,7 +514,7 @@ ${orders.length ? html`<div class="acc-orders">${orders.map((o) => html`<div cla
 
 function statusTimeline(o) {
   const steps = ['new', 'processing', 'shipped', 'completed'];
-  const labels = { new: 'جديد', processing: 'قيد التجهيز', shipped: 'تم الشحن', completed: 'مكتمل' };
+  const labels = { new: 'جديد', processing: 'قيد التجهيز', shipped: o.shipping_fee > 0 ? 'تم الشحن' : 'جاهز للاستلام', completed: 'مكتمل' };
   if (o.status === 'cancelled') return html`<div class="timeline cancelled"><b>❌ تم إلغاء هذا الطلب</b></div>`;
   const idx = steps.indexOf(o.status);
   return html`<ol class="timeline">${steps.map((st, i) => html`<li class="${i <= idx ? 'done' : ''} ${i === idx ? 'now' : ''}"><span></span>${labels[st]}</li>`)}</ol>`;
@@ -525,7 +529,7 @@ function orderSummary(o) {
   </tbody><tfoot>
     <tr><td>المجموع</td><td>${money(o.subtotal)}</td></tr>
     ${o.discount ? html`<tr><td>الخصم ${o.coupon_code ? html`<small dir="ltr">(${o.coupon_code})</small>` : ''}</td><td class="green">-${money(o.discount)}</td></tr>` : ''}
-    <tr><td>التوصيل — ${o.city}</td><td>${money(o.shipping_fee)}</td></tr>
+    ${o.shipping_fee > 0 ? html`<tr><td>التوصيل — ${o.city}</td><td>${money(o.shipping_fee)}</td></tr>` : html`<tr><td colspan="2" class="pk">📍 ${o.city || 'الاستلام من المحل'}</td></tr>`}
     <tr class="total"><td>الإجمالي</td><td>${money(o.total)}</td></tr>
   </tfoot></table>
   <p class="muted small">طريقة الدفع: ${o.payment_label}</p>
@@ -535,8 +539,15 @@ function orderSummary(o) {
 function orderSuccess(req, o) {
   const body = html`<div class="wrap narrow">
 <div class="success-hero"><span class="check">✓</span><h1>تم استلام طلبك بنجاح</h1><p>شكراً لك ${o.customer_name}! سنتواصل معك على الرقم <b dir="ltr">${o.phone}</b> لتأكيد الطلب.</p></div>
-${o.whatsapp_url ? html`<div class="panel wa-cta"><p><b>آخر خطوة:</b> أرسل الفاتورة لنا عبر واتساب بضغطة واحدة لتأكيد الطلب.</p><a class="btn wa lg" href="${o.whatsapp_url}" target="_blank" rel="noopener" data-wa-text="${o.whatsapp_text + '\n\n🧾 رابط الفاتورة: ' + siteUrl(req) + '/invoice/' + o.number + '?t=' + o.token}" ${req.query.send ? raw('data-wa-auto') : ''}>${icons.wa} إرسال الفاتورة عبر واتساب</a></div>` : ''}
-<p class="center"><a class="btn ghost" href="/invoice/${o.number}?t=${o.token}">🧾 عرض الفاتورة وطباعتها</a></p>
+<div class="panel wa-cta inv-cta">
+  <p><b>آخر خطوة:</b> أرسل صورة الفاتورة لنا على واتساب لتأكيد الطلب.</p>
+  <button class="btn wa lg block" type="button" data-inv-share ${req.query.send ? raw('data-wa-auto') : ''}>${icons.wa} إرسال صورة الفاتورة عبر واتساب</button>
+  <img data-inv-preview hidden alt="صورة الفاتورة" class="inv-preview">
+  <div class="inv-more"><a class="btn ghost sm" href="/invoice/${o.number}?t=${o.token}">🧾 فتح الفاتورة وطباعتها</a><button class="btn ghost sm" type="button" data-inv-download>⬇ حفظ الصورة</button>${o.whatsapp_url ? html`<button class="btn ghost sm" type="button" data-wa-text="${o.whatsapp_text + '\n\n🧾 رابط الفاتورة: ' + siteUrl(req) + '/invoice/' + o.number + '?t=' + o.token}">💬 إرسالها كرسالة نصية</button>` : ''}</div>
+  <p class="small muted">على التلفون: اضغط الزر الأخضر ← اختار <b>واتساب</b> ← اختار محادثة المحل وأرسل.</p>
+</div>
+<div hidden id="inv-data" data-json="${JSON.stringify(invoiceData(o, getSettings()))}" data-wa="${waNumbers(getSettings())}"></div>
+<script src="/js/invoice-img.js?v=3" defer></script>
 ${orderSummary(o)}
 <div class="center gap"><a class="btn ghost" href="/track?number=${encodeURIComponent(o.number)}">تتبع الطلب</a><a class="btn primary" href="/shop">متابعة التسوق</a></div>
 </div>`;

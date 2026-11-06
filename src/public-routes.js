@@ -215,8 +215,8 @@ function register(r) {
     const d = validate(b, {
       name: { type: 'string', required: true, min: 2, max: 80, label: 'الاسم' },
       phone: { type: 'string', required: true, max: 30, label: 'رقم الهاتف' },
-      zone: { type: 'int', required: true, min: 0, max: 100, label: 'منطقة التوصيل' },
-      address: { type: 'string', required: true, min: 3, max: 300, label: 'العنوان' },
+      zone: { type: 'int', required: !store.pickupOnly(), min: 0, max: 100, label: 'منطقة التوصيل' },
+      address: { type: 'string', required: !store.pickupOnly(), min: store.pickupOnly() ? 0 : 3, max: 300, label: 'العنوان' },
       notes: { type: 'string', max: 500, label: 'الملاحظات' },
       payment_method: { type: 'string', required: true, max: 20, label: 'طريقة الدفع' },
       coupon: { type: 'string', max: 40 },
@@ -225,7 +225,7 @@ function register(r) {
     d.phone = normalizePhone(d.phone);
     if (!isValidPhone(d.phone)) throw Object.assign(new HttpError(400, 'رقم الهاتف غير صحيح'), {});
     const order = store.createOrder({ ...d, customer_id: cust ? cust.id : null }, ip);
-    if (cust) run('UPDATE customers SET city = ?, address = ? WHERE id = ?', order.city, order.address, cust.id);
+    if (cust && !store.pickupOnly()) run('UPDATE customers SET city = ?, address = ? WHERE id = ?', order.city, order.address, cust.id);
     console.log(`[order] ${order.number} total=${order.total} items=${order.items.length}`);
     sendJson(req, res, 201, { number: order.number, token: order.token, url: `/order/${order.number}?t=${order.token}&send=1`, invoice_url: `/invoice/${order.number}?t=${order.token}`, whatsapp_url: order.whatsapp_url, total: order.total });
   });

@@ -10,9 +10,12 @@ const PRODUCT_COLS = `p.id, p.name, p.slug, p.sku, p.category_id, p.brand, p.tag
   (SELECT media_id FROM product_images pi WHERE pi.product_id = p.id ORDER BY sort_order, id LIMIT 1) AS image_id,
   (SELECT media_id FROM product_images pi WHERE pi.product_id = p.id ORDER BY sort_order, id LIMIT 1 OFFSET 1) AS image2_id`;
 
+const tracking = () => process.env.TRACK_STOCK === 'true' || getSettings().track_stock === true;
+const pickupOnly = () => process.env.DELIVERY !== 'true' && getSettings().delivery_enabled !== true;
 function availability(p) {
   if (!p.active) return { key: 'hidden', label: 'غير متاح' };
   if (!(p.price > 0)) return { key: 'ask', label: 'اسأل عن التوفر' };
+  if (!tracking()) return { key: 'in', label: 'متوفر' };
   if (p.stock <= 0) return { key: 'out', label: 'نفد المخزون' };
   if (p.stock <= (p.low_stock_threshold || 0)) return { key: 'low', label: `كمية محدودة (${p.stock})` };
   return { key: 'in', label: 'متوفر' };
@@ -20,6 +23,7 @@ function availability(p) {
 function decorate(p) {
   if (!p) return p;
   p.availability = availability(p);
+  p.max_qty = tracking() ? Math.max(0, p.stock) : 999;
   p.discount_pct = p.compare_at_price && p.compare_at_price > p.price ? Math.round((1 - p.price / p.compare_at_price) * 100) : 0;
   p.has_wholesale = !!(p.wholesale_price && p.wholesale_price > 0 && p.wholesale_price < p.price);
   return p;
@@ -41,7 +45,7 @@ function listProducts(f = {}) {
   if (f.categoryId) { where.push('p.category_id = ?'); params.push(f.categoryId); }
   if (f.min != null && f.min !== '' && !isNaN(f.min)) { where.push('p.price >= ?'); params.push(Number(f.min)); }
   if (f.max != null && f.max !== '' && !isNaN(f.max)) { where.push('p.price <= ?'); params.push(Number(f.max)); }
-  if (f.inStock) where.push('p.stock > 0');
+  if (f.inStock && tracking()) where.push('p.stock > 0');
   if (f.sale) where.push('p.compare_at_price > p.price');
   if (f.featured) where.push('p.featured = 1');
   if (f.wholesale) where.push('p.wholesale_price > 0 AND p.wholesale_price < p.price');
@@ -142,12 +146,13 @@ function quote({ items = [], coupon: code = '', zone = null } = {}) {
     const wholesale = p.has_wholesale && qty >= (p.wholesale_min_qty || 1);
     const unit = wholesale ? p.wholesale_price : p.price;
     const line = {
-      id, qty, name: p.name, slug: p.slug, sku: p.sku, image_id: p.image_id, icon: p.category_icon, stock: p.stock,
+      id, qty, name: p.name, slug: p.slug, sku: p.sku, image_id: p.image_id, icon: p.category_icon, stock: tracking() ? p.stock : 999,
       unit_price: unit, retail_price: p.price, price_type: wholesale ? 'wholesale' : 'retail', cost_price: p.cost_price || 0,
       wholesale_price: p.has_wholesale ? p.wholesale_price : null, wholesale_min_qty: p.has_wholesale ? p.wholesale_min_qty : null,
       line_total: round2(unit * qty),
     };
     if (!(p.price > 0)) { line.error = 'السعر غير محدد — اسألنا عبر واتساب'; errors.push({ id, message: `«${p.name}» سعره عند الطلب، تواصل معنا لتأكيده` }); }
+    else if (!tracking()) { /* unlimited quantity */ }
     else if (p.stock <= 0) { line.error = 'نفد من المخزون'; errors.push({ id, message: `«${p.name}» نفد من المخزون` }); }
     else if (qty > p.stock) { line.error = `المتوفر ${p.stock} فقط`; errors.push({ id, message: `الكمية المتوفرة من «${p.name}» هي ${p.stock} فقط` }); }
     lines.push(line);
@@ -162,7 +167,8 @@ function quote({ items = [], coupon: code = '', zone = null } = {}) {
   }
   const zones = Array.isArray(s.shipping_zones) ? s.shipping_zones : [];
   let shipping = 0; let zoneObj = null;
-  if (zone !== null && zone !== undefined && zone !== '') {
+  if (pickupOnly()) zoneObj = { name: s.pickup_label || 'استلام من المحل', fee: 0, pickup: true };
+  else if (zone !== null && zone !== undefined && zone !== '') {
     zoneObj = zones[Number(zone)] || null;
     if (zoneObj) shipping = round2(zoneObj.fee);
   }
@@ -190,11 +196,11 @@ function whatsappText(o, items) {
     '',
     `المجموع: ${money(o.subtotal)}`,
     o.discount ? `الخصم${o.coupon_code ? ' (' + o.coupon_code + ')' : ''}: -${money(o.discount)}` : null,
-    `التوصيل (${o.city || ''}): ${o.shipping_fee ? money(o.shipping_fee) : 'مجاناً'}`,
+    o.shipping_fee ? `التوصيل (${o.city || ''}): ${money(o.shipping_fee)}` : `الاستلام: ${o.city || 'من المحل'}`,
     `الإجمالي: ${money(o.total)}`,
     amountInWords(o.total),
     `طريقة الدفع: ${o.payment_label}`,
-    `العنوان: ${[o.city, o.address].filter(Boolean).join(' — ')}`,
+    o.address ? `العنوان: ${o.address}` : null,
     o.notes ? `ملاحظات: ${o.notes}` : null,
   ].filter((x) => x !== null).join('\n');
 }
@@ -236,6 +242,7 @@ function createOrder(data, ip) {
     for (const l of q.lines) {
       run('INSERT INTO order_items(order_id, product_id, name, sku, unit_price, cost_price, qty, price_type, line_total) VALUES(?,?,?,?,?,?,?,?,?)',
         orderId, l.id, l.name, l.sku, l.unit_price, l.cost_price, l.qty, l.price_type, l.line_total);
+      if (!tracking()) { run('UPDATE products SET sold_count = sold_count + ? WHERE id = ?', l.qty, l.id); continue; }
       // atomic decrement guarded against overselling
       const u = run('UPDATE products SET stock = stock - ?, sold_count = sold_count + ? WHERE id = ? AND stock >= ?', l.qty, l.qty, l.id, l.qty);
       if (Number(u.changes) !== 1) throw new OrderError(`الكمية المطلوبة من «${l.name}» لم تعد متوفرة`);
@@ -275,8 +282,10 @@ function setOrderStatus(id, status, note, adminId) {
     if (o.status === status) return getOrder(id);
     if (!(TRANSITIONS[o.status] || []).includes(status)) throw new OrderError(`لا يمكن تغيير الحالة من «${STATUS[o.status]}» إلى «${STATUS[status]}»`);
     const items = all('SELECT * FROM order_items WHERE order_id = ?', id);
+    const track = tracking();
     if (status === 'cancelled') {
       for (const i of items) if (i.product_id) {
+        if (!track) { run('UPDATE products SET sold_count = MAX(0, sold_count - ?) WHERE id = ?', i.qty, i.product_id); continue; }
         run('UPDATE products SET stock = stock + ?, sold_count = MAX(0, sold_count - ?) WHERE id = ?', i.qty, i.qty, i.product_id);
         const p = get('SELECT stock FROM products WHERE id = ?', i.product_id);
         if (p) run('INSERT INTO stock_movements(product_id, change, stock_after, reason, ref, admin_id) VALUES(?,?,?,?,?,?)', i.product_id, i.qty, p.stock, 'إلغاء طلب', o.number, adminId);
@@ -284,6 +293,7 @@ function setOrderStatus(id, status, note, adminId) {
       if (o.coupon_code) run('UPDATE coupons SET used_count = MAX(0, used_count - 1) WHERE code = ?', o.coupon_code);
     } else if (o.status === 'cancelled') {
       for (const i of items) if (i.product_id) {
+        if (!track) { run('UPDATE products SET sold_count = sold_count + ? WHERE id = ?', i.qty, i.product_id); continue; }
         const u = run('UPDATE products SET stock = stock - ?, sold_count = sold_count + ? WHERE id = ? AND stock >= ?', i.qty, i.qty, i.product_id, i.qty);
         if (Number(u.changes) !== 1) throw new OrderError(`لا يوجد مخزون كافٍ من «${i.name}» لإعادة فتح الطلب`);
         const p = get('SELECT stock FROM products WHERE id = ?', i.product_id);
@@ -312,5 +322,5 @@ function adjustStock(productId, change, reason, adminId) {
 
 module.exports = {
   PRODUCT_COLS, decorate, availability, listProducts, getProductBySlug, relatedProducts, categoriesWithCounts, suggest,
-  quote, createOrder, getOrder, setOrderStatus, adjustStock, OrderError, whatsappLink, SORTS, TRANSITIONS,
+  tracking, pickupOnly, quote, createOrder, getOrder, setOrderStatus, adjustStock, OrderError, whatsappLink, SORTS, TRANSITIONS,
 };

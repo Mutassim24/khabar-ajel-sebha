@@ -49,16 +49,36 @@ function amountInWords(v) {
   return 'فقط ' + parts.join(' و') + ' لا غير';
 }
 
+/** Shop WhatsApp numbers in international form (09x… → 2189x…). */
+const waNumbers = (s) => [s.whatsapp, s.whatsapp2].map((n) => String(n || '').replace(/\D/g, '')).filter(Boolean).map((n) => (n.startsWith('0') ? '218' + n.slice(1) : n)).join(',');
+
 /* ---------- money split ---------- */
 const split = (v) => { const t = Math.round((Number(v) || 0) * 1000); const neg = t < 0; const a = Math.abs(t); return { d: (neg ? '-' : '') + Math.floor(a / 1000).toLocaleString('en-US'), h: String(a % 1000).padStart(3, '0') }; };
 const cells = (v) => { const s = split(v); return html`<td class="dn">${s.d}</td><td class="dh">${s.h}</td>`; };
 const fmtDate = (iso) => { const d = new Date(iso); return isNaN(d) ? '' : d.toLocaleDateString('en-GB', { timeZone: 'Africa/Tripoli' }); };
 const money3 = (v) => (Math.round((Number(v) || 0) * 1000) / 1000).toLocaleString('en-US', { maximumFractionDigits: 3 });
 
-function invoicePage({ order: o, settings: s, isAdmin }) {
+function invoiceRows(o) {
   const rows = o.items.map((i) => ({ name: i.name + (i.price_type === 'wholesale' ? ' (جملة)' : ''), sku: i.sku, qty: i.qty, unit: i.unit_price, total: i.line_total }));
   if (o.discount > 0) rows.push({ name: 'خصم' + (o.coupon_code ? ` (${o.coupon_code})` : ''), qty: '', unit: '', total: -o.discount });
   if (o.shipping_fee > 0) rows.push({ name: `رسوم التوصيل — ${o.city || ''}`, qty: 1, unit: o.shipping_fee, total: o.shipping_fee });
+  return rows;
+}
+/** Plain data for drawing the invoice as an image in the browser (sent to WhatsApp as a picture). */
+function invoiceData(o, s) {
+  const paid = o.paid_amount == null ? (o.status === 'completed' ? o.total : 0) : o.paid_amount;
+  return {
+    title: s.invoice_title || s.store_name, subtitle: s.invoice_subtitle || s.tagline, tagline: s.invoice_tagline || 'جملة - قطاعي', address: s.invoice_address || s.address,
+    brands: (s.invoice_brands || '').split(/[,،·]/).map((b) => b.trim()).filter(Boolean),
+    number: o.number, date: fmtDate(o.created_at), customer: o.customer_name, phone: o.phone, credit: o.payment_terms === 'credit',
+    rows: invoiceRows(o).map((r) => ({ name: r.name, qty: r.qty, unit: r.unit, total: r.total })),
+    total: o.total, paid, remaining: Math.round((o.total - paid) * 1000) / 1000, words: amountInWords(o.total),
+    phones: [[s.invoice_city_1, s.invoice_phones_1], [s.invoice_city_2, s.invoice_phones_2]].filter((x) => x[1]),
+    payment: o.payment_label || o.payment_method, pickup: o.shipping_fee > 0 ? '' : (o.city || ''),
+  };
+}
+function invoicePage({ order: o, settings: s, isAdmin }) {
+  const rows = invoiceRows(o);
   const n = Math.max(20, rows.length);
   const paid = o.paid_amount == null ? (o.status === 'completed' ? o.total : 0) : o.paid_amount;
   const remaining = Math.round((o.total - paid) * 1000) / 1000;
@@ -67,11 +87,13 @@ function invoicePage({ order: o, settings: s, isAdmin }) {
   return '<!doctype html>' + String(html`<html lang="ar" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex"><title>فاتورة ${o.number} | ${s.store_name}</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800;900&display=swap">
-<link rel="stylesheet" href="/css/invoice.css?v=1"></head>
+<link rel="stylesheet" href="/css/invoice.css?v=3"></head>
 <body data-order="${o.id}" data-total="${o.total}">
 <div class="bar no-print">
   ${isAdmin ? html`<a href="/admin#/orders/${o.id}">← رجوع للطلب</a>` : html`<a href="/order/${o.number}?t=${o.token}">← رجوع للطلب</a>`}
-  <button type="button" data-print>🖨 طباعة / حفظ PDF</button>
+  <button type="button" class="share" data-inv-share>📤 إرسال صورة الفاتورة (واتساب)</button>
+  <button type="button" data-inv-download>⬇ حفظ صورة</button>
+  <button type="button" data-print>🖨 طباعة / PDF</button>
   ${isAdmin ? html`<button type="button" data-save hidden>💾 حفظ المدفوع ونوع الدفع</button><span class="msg" data-msg></span>` : ''}
 </div>
 <main class="inv">
@@ -124,8 +146,10 @@ function invoicePage({ order: o, settings: s, isAdmin }) {
   </footer>
   <p class="meta">طريقة الدفع: ${o.payment_label || o.payment_method}${o.address ? html` · العنوان: ${o.city ? o.city + ' — ' : ''}${o.address}` : ''}</p>
 </main>
-<script src="/js/invoice.js?v=1"></script>
+<div hidden id="inv-data" data-json="${JSON.stringify(invoiceData(o, s))}" data-wa="${waNumbers(s)}"></div>
+<script src="/js/invoice-img.js?v=3"></script>
+<script src="/js/invoice.js?v=4"></script>
 </body></html>`);
 }
 
-module.exports = { invoicePage, amountInWords, numberWords };
+module.exports = { invoicePage, invoiceData, amountInWords, numberWords, waNumbers };

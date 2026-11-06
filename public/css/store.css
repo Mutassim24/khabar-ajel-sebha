@@ -505,3 +505,9 @@ body.lock{overflow:hidden}
   .inv-table td:nth-child(5){grid-area:tt;font-size:15px}.inv-table td:nth-child(6){grid-area:rm}
   .inv-table tr td[colspan]{grid-column:1/-1}
 }
+
+.inv-cta{display:grid;gap:10px;text-align:center}
+.inv-preview{width:100%;border:1px solid var(--line);border-radius:12px;background:#fff;box-shadow:var(--shadow)}
+.inv-more{display:flex;flex-wrap:wrap;gap:8px;justify-content:center}
+.pickup-box{display:grid;gap:4px;padding:12px;border:1.5px dashed var(--blue);border-radius:12px;background:var(--blue-50)}.pickup-box small{color:var(--muted)}
+.order-box table td:last-child{white-space:nowrap}.order-box table td.pk{white-space:normal;color:var(--muted);font-weight:700}

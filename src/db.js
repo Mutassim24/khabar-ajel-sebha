@@ -124,10 +124,13 @@ function tx(fn) {
 const DEFAULT_SETTINGS = {
   store_name: 'خبر عاجل سبها',
   tagline: 'إكسسوارات الهواتف المحمولة وقطع الغيار',
-  topline: '🚚 توصيل داخل سبها وإلى جميع المدن الليبية · الدفع عند الاستلام · أسعار جملة للتجار',
+  topline: '📍 الاستلام من المحل في سبها · الدفع نقداً عند الاستلام · أسعار جملة للتجار',
   whatsapp: '218926201329',
   whatsapp2: '218928146639',
-  require_account: true, // customers must create an account / log in before buying // second WhatsApp number — customers choose which one to message
+  require_account: true,
+  track_stock: false,      // false = unlimited quantity (no stock counting)
+  delivery_enabled: false, // false = customers pick up from the shop
+  pickup_label: 'استلام من المحل — سبها، بالقرب من شركة لبيانا', // customers must create an account / log in before buying // second WhatsApp number — customers choose which one to message
   phone: '0926201329',
   // printed invoice (same as the shop's paper invoice)
   invoice_title: 'خبر عاجل',
@@ -202,6 +205,8 @@ db.exec('CREATE INDEX IF NOT EXISTS idx_categories_parent ON categories(parent_i
   if (!cc.includes('password_hash')) db.exec('ALTER TABLE customers ADD COLUMN password_hash TEXT');
   if (!cc.includes('token_version')) db.exec('ALTER TABLE customers ADD COLUMN token_version INTEGER NOT NULL DEFAULT 0');
   if (!cc.includes('registered_at')) db.exec('ALTER TABLE customers ADD COLUMN registered_at TEXT'); }
+{ const t = get("SELECT value FROM settings WHERE key = 'topline'");
+  if (t && JSON.parse(t.value) === '🚚 توصيل داخل سبها وإلى جميع المدن الليبية · الدفع عند الاستلام · أسعار جملة للتجار') db.prepare("DELETE FROM settings WHERE key = 'topline'").run(); }
 { const oc = all('PRAGMA table_info(orders)').map((c) => c.name);
   if (!oc.includes('paid_amount')) db.exec('ALTER TABLE orders ADD COLUMN paid_amount REAL');
   if (!oc.includes('payment_terms')) db.exec("ALTER TABLE orders ADD COLUMN payment_terms TEXT NOT NULL DEFAULT 'cash'"); }

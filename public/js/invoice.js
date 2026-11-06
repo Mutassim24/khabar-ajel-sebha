@@ -3,6 +3,9 @@
   'use strict';
   var $ = function (s) { return document.querySelector(s); };
   var pb = $('[data-print]'); if (pb) pb.onclick = function () { window.print(); };
+  // show the whole paper invoice on phones: scale it down to the screen width (pinch to zoom in)
+  var inv = $('.inv'); var fit = function () { inv.style.zoom = Math.min(1, (document.documentElement.clientWidth - 8) / 796); };
+  if (inv) { fit(); window.addEventListener('resize', fit); }
   var paid = $('[data-paid]'); if (!paid) return;
   var total = Number(document.body.dataset.total) || 0, save = $('[data-save]'), msg = $('[data-msg]');
   var fmt = function (v) { return (Math.round(v * 1000) / 1000).toLocaleString('en-US', { maximumFractionDigits: 3 }) + ' د.ل'; };

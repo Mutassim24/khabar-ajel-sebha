@@ -171,7 +171,7 @@ function register(r) {
     sendJson(req, res, 200, { id: admin.id, name: admin.name, email: admin.email, role: admin.role });
   });
   r.post('/api/admin/logout', (req, res) => { auth.clearSessionCookie(req, res); sendJson(req, res, 200, { ok: true }); });
-  r.get('/api/admin/me', A((req, res, p, a) => sendJson(req, res, 200, { id: a.id, name: a.name, email: a.email, role: a.role, store_name: getSettings().store_name })));
+  r.get('/api/admin/me', A((req, res, p, a) => sendJson(req, res, 200, { id: a.id, name: a.name, email: a.email, role: a.role, store_name: getSettings().store_name, track_stock: store.tracking(), delivery_enabled: !store.pickupOnly() })));
   r.post('/api/admin/password', A(async (req, res, p, a) => {
     const b = await jsonBody(req);
     const d = validate(b, { current: { type: 'string', required: true, label: 'كلمة المرور الحالية', trim: false }, next: { type: 'string', required: true, min: 10, max: 200, label: 'كلمة المرور الجديدة', trim: false } });
@@ -672,7 +672,7 @@ function register(r) {
       instagram: { type: 'string', max: 200, pattern: /^(https?:\/\/.*)?$/, patternMsg: 'رابط إنستغرام يجب أن يبدأ بـ https://' },
       tiktok: { type: 'string', max: 200, pattern: /^(https?:\/\/.*)?$/, patternMsg: 'رابط تيك توك يجب أن يبدأ بـ https://' },
       site_url: { type: 'string', max: 200, pattern: /^(https?:\/\/[^\s]+)?$/, patternMsg: 'رابط الموقع يجب أن يبدأ بـ https://' },
-      require_account: { type: 'bool' },
+      require_account: { type: 'bool' }, track_stock: { type: 'bool' }, delivery_enabled: { type: 'bool' }, pickup_label: str(120),
       invoice_title: str(60), invoice_subtitle: str(120), invoice_tagline: str(60), invoice_address: str(120), invoice_brands: str(120),
       invoice_city_1: str(30), invoice_phones_1: str(80), invoice_city_2: str(30), invoice_phones_2: str(80),
       seo_description: str(300), wholesale_note: str(300),
@@ -684,7 +684,7 @@ function register(r) {
     d.whatsapp = d.whatsapp ? d.whatsapp.replace(/\D/g, '') : '';
     d.whatsapp2 = d.whatsapp2 ? d.whatsapp2.replace(/\D/g, '') : '';
     d.shipping_zones = d.shipping_zones.map((z) => validate(z, { name: { type: 'string', required: true, max: 80, label: 'اسم المنطقة' }, fee: { type: 'number', required: true, min: 0, max: 10000, label: 'رسوم التوصيل' } }));
-    if (!d.shipping_zones.length) throw new HttpError(400, 'أضف منطقة توصيل واحدة على الأقل');
+    if (!d.shipping_zones.length && d.delivery_enabled) throw new HttpError(400, 'أضف منطقة توصيل واحدة على الأقل');
     const ids = new Set(DEFAULT_SETTINGS.payment_methods.map((m) => m.id));
     d.payment_methods = d.payment_methods.map((m) => validate(m, { id: { type: 'string', required: true, max: 20, pattern: /^[a-z0-9_-]+$/ }, name: { type: 'string', required: true, max: 80, label: 'اسم طريقة الدفع' }, instructions: str(300), enabled: { type: 'bool' } }));
     if (!d.payment_methods.some((m) => m.enabled)) throw new HttpError(400, 'فعّل طريقة دفع واحدة على الأقل');
