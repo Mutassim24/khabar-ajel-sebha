@@ -1,8 +1,16 @@
-/* Draws the shop invoice (same layout as the paper invoice) on a canvas, so it can be sent to WhatsApp as a picture.
-   Usage: KAInvoice.attach(dataElement) wires [data-inv-share] / [data-inv-download] / [data-inv-preview]. */
+/* Fills the shop's real paper invoice (public/img/invoice-template.webp, 1024×1536) on a canvas:
+   number, cash/credit tick, date, customer, 20 item rows (more items → extra pages), totals, amount in words, phone.
+   The picture is what the customer sends to WhatsApp and what the invoice page shows and prints.
+   Usage: var inv = KAInvoice.attach(dataElement); inv.update({paid, credit}) re-draws. */
 (function () {
   'use strict';
-  var W = 1080, P = 44, F = 'Cairo, "Segoe UI", Tahoma, Arial, sans-serif';
+  var TPL = '/img/invoice-template.webp?v=1', S = 1.5, ROWS = 20;
+  var F = 'Cairo, "Segoe UI", Tahoma, Arial, sans-serif', NAVY = '#011639', BLUE = '#1290fb';
+  // row boundaries measured on the template (y of each ruled line)
+  var LINES = [428, 466, 501, 537, 571, 605, 640, 675, 709, 744, 779, 815, 850, 885, 920, 954, 990, 1024, 1059, 1094, 1131];
+  // column centres / edges (x) — the template's money columns are [دينار | درهم] from left to right
+  var COL = { m: 966, descR: 916, descW: 392, qty: 462, uD: 276, uH: 365, tD: 78, tH: 175 };
+
   var split = function (v) {
     if (v === '' || v === null || v === undefined) return ['', ''];
     var t = Math.round(Number(v) * 1000), neg = t < 0, a = Math.abs(t);
@@ -10,163 +18,168 @@
   };
   var money = function (v) { return (Math.round(Number(v) * 1000) / 1000).toLocaleString('en-US', { maximumFractionDigits: 3 }) + ' د.ل'; };
 
-  function wrap(ctx, text, maxW, maxLines) {
-    var words = String(text).split(/\s+/), lines = [], cur = '';
-    for (var i = 0; i < words.length; i++) {
-      var t = cur ? cur + ' ' + words[i] : words[i];
-      if (ctx.measureText(t).width > maxW && cur) { lines.push(cur); cur = words[i]; } else cur = t;
-    }
-    if (cur) lines.push(cur);
-    if (lines.length > maxLines) { lines = lines.slice(0, maxLines); lines[maxLines - 1] += '…'; }
-    return lines;
-  }
-  function rrect(ctx, x, y, w, h, r, fill, stroke) {
-    ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r);
-    ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath();
-    if (fill) { ctx.fillStyle = fill; ctx.fill(); }
-    if (stroke) { ctx.strokeStyle = stroke; ctx.lineWidth = 2.5; ctx.stroke(); }
-  }
-  function text(ctx, s, x, y, o) {
-    o = o || {}; ctx.font = (o.w || 700) + ' ' + (o.size || 26) + 'px ' + F; ctx.fillStyle = o.color || '#111';
-    ctx.textAlign = o.align || 'right'; ctx.textBaseline = o.base || 'middle'; ctx.direction = o.dir || 'rtl';
+  function font(ctx, size, w) { ctx.font = (w || 700) + ' ' + size + 'px ' + F; }
+  // draw text, shrinking it until it fits maxW (down to min), then cutting it with …
+  function fit(ctx, s, x, y, o) {
+    s = String(s == null ? '' : s); if (!s) return;
+    var size = o.size || 20, min = o.min || 12;
+    ctx.direction = o.dir || 'rtl'; ctx.textAlign = o.align || 'right'; ctx.textBaseline = 'middle'; ctx.fillStyle = o.color || NAVY;
+    font(ctx, size, o.w);
+    while (o.maxW && ctx.measureText(s).width > o.maxW && size > min) { size -= 1; font(ctx, size, o.w); }
+    if (o.maxW && ctx.measureText(s).width > o.maxW) { while (s.length > 1 && ctx.measureText(s + '…').width > o.maxW) s = s.slice(0, -1); s += '…'; }
     ctx.fillText(s, x, y);
   }
-
-  function draw(d) {
-    // columns from the right (RTL): م | البيان | الكمية | سعر الوحدة (دينار، درهم) | الإجمالي (دينار، درهم)
-    var gap = 6, inner = W - 2 * P;
-    var cw = [58, 0, 96, 118, 78, 128, 82]; cw[1] = inner - cw.reduce(function (a, b) { return a + b; }, 0) - gap * 6;
-    var xs = []; var x = W - P; for (var i = 0; i < cw.length; i++) { xs.push(x); x -= cw[i] + gap; } // right edge of each column
-    var tmp = document.createElement('canvas').getContext('2d'); tmp.font = '700 25px ' + F; tmp.direction = 'rtl';
-    var rows = d.rows.map(function (r) { return { r: r, lines: wrap(tmp, r.name, cw[1] - 20, 3) }; });
-    var minRows = Math.max(8, rows.length);
-    var rowH = function (k) { return k < rows.length ? Math.max(58, rows[k].lines.length * 32 + 20) : 50; };
-    var tableH = 0; for (var k = 0; k < minRows; k++) tableH += rowH(k);
-    var H = 470 + 96 + tableH + 330;
-    var c = document.createElement('canvas'); c.width = W; c.height = H;
-    var ctx = c.getContext('2d');
-    ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, W, H);
-
-    // header
-    text(ctx, d.title, W - P, 70, { size: 72, w: 900 });
-    text(ctx, d.subtitle || '', W - P, 140, { size: 28, w: 800 });
-    text(ctx, d.tagline || '', W - P - 150, 182, { size: 28, w: 800 });
-    (d.brands || []).forEach(function (b, i) { text(ctx, b, P, 62 + i * 44, { size: i ? 32 : 46, w: 900, align: 'left', dir: 'ltr' }); });
-    text(ctx, d.address || '', W - P, 250, { size: 28, w: 800 });
-    // invoice no + cash/credit
-    text(ctx, 'فاتورة رقم', 650, 236, { size: 22, w: 800 });
-    text(ctx, 'INVOICE', 650, 264, { size: 20, w: 800, dir: 'ltr' });
-    text(ctx, d.number, 530, 252, { size: 34, w: 700, color: '#d0021b', dir: 'ltr' });
-    var box = function (bx, on, label) {
-      ctx.strokeStyle = '#111'; ctx.lineWidth = 3; ctx.strokeRect(bx, 238, 28, 28);
-      if (on) { ctx.beginPath(); ctx.moveTo(bx + 5, 252); ctx.lineTo(bx + 12, 261); ctx.lineTo(bx + 24, 243); ctx.stroke(); }
-      text(ctx, label, bx - 8, 252, { size: 27, w: 800 });
-    };
-    box(225, !d.credit, 'نقداً'); box(85, d.credit, 'أجل');
-    // customer + date
-    var y = 300;
-    rrect(ctx, W - P - 120, y, 120, 58, 10, null, '#111'); text(ctx, 'الزبون', W - P - 60, y + 30, { size: 26, w: 800, align: 'center' });
-    rrect(ctx, 330, y, W - P - 120 - 12 - 330, 58, 10, null, '#111');
-    text(ctx, d.customer || '', W - P - 140, y + 30, { size: 26, w: 800 });
-    text(ctx, d.phone || '', 350, y + 30, { size: 25, w: 700, align: 'left', dir: 'ltr', color: '#333' });
-    text(ctx, 'التاريخ', 316, y + 30, { size: 26, w: 800 });
-    rrect(ctx, P, y, 180, 58, 10, null, '#111'); text(ctx, d.date || '', P + 90, y + 30, { size: 25, w: 700, align: 'center', dir: 'ltr' });
-
-    // table header
-    y = 390; var hh = 92;
-    var head = function (ci, span, label, two) {
-      var right = xs[ci], left = xs[ci + span - 1] - cw[ci + span - 1], w = right - left;
-      rrect(ctx, left, y, w, two ? 50 : hh, 12, '#111');
-      text(ctx, label, left + w / 2, y + (two ? 26 : hh / 2), { size: 25, w: 800, color: '#fff', align: 'center' });
-      if (two) for (var j = 0; j < span; j++) {
-        var cr = xs[ci + j], cl = cr - cw[ci + j];
-        ctx.strokeStyle = '#111'; ctx.lineWidth = 2.5; ctx.strokeRect(cl, y + 50, cw[ci + j], hh - 50);
-        text(ctx, j ? 'درهم' : 'دينار', cl + cw[ci + j] / 2, y + 71, { size: 20, w: 800, align: 'center' });
-      }
-    };
-    head(0, 1, 'م'); head(1, 1, 'البيــــان'); head(2, 1, 'الكمية'); head(3, 2, 'سعر الوحدة', true); head(5, 2, 'السعر الإجمالي', true);
-    // rows
-    y += hh + 4; var top = y;
-    for (k = 0; k < minRows; k++) {
-      var h = rowH(k), row = rows[k];
-      ctx.strokeStyle = '#9aa3ae'; ctx.lineWidth = 1.2;
-      for (i = 0; i < cw.length; i++) { ctx.beginPath(); ctx.moveTo(xs[i] - cw[i], y + h); ctx.lineTo(xs[i], y + h); ctx.stroke(); }
-      text(ctx, String(k + 1), xs[0] - cw[0] / 2, y + h / 2, { size: 24, w: 800, align: 'center' });
-      if (row) {
-        row.lines.forEach(function (ln, li) { text(ctx, ln, xs[1] - 10, y + h / 2 + (li - (row.lines.length - 1) / 2) * 32, { size: 25, w: 700 }); });
-        text(ctx, String(row.r.qty), xs[2] - cw[2] / 2, y + h / 2, { size: 26, w: 800, align: 'center', dir: 'ltr' });
-        var u = split(row.r.unit), t = split(row.r.total);
-        text(ctx, u[0], xs[3] - cw[3] / 2, y + h / 2, { size: 26, w: 800, align: 'center', dir: 'ltr' });
-        text(ctx, u[1], xs[4] - cw[4] / 2, y + h / 2, { size: 22, w: 700, align: 'center', dir: 'ltr', color: '#555' });
-        text(ctx, t[0], xs[5] - cw[5] / 2, y + h / 2, { size: 26, w: 800, align: 'center', dir: 'ltr' });
-        text(ctx, t[1], xs[6] - cw[6] / 2, y + h / 2, { size: 22, w: 700, align: 'center', dir: 'ltr', color: '#555' });
-      }
-      y += h;
+  // item name: one line if it fits at a readable size, otherwise two lines inside the row
+  function desc(ctx, name, y) {
+    name = String(name || ''); var w = COL.descW;
+    font(ctx, 16, 700);
+    if (ctx.measureText(name).width <= w) { fit(ctx, name, COL.descR, y, { size: 20, min: 16, w: 700, maxW: w }); return; }
+    // prefer breaking at « — » (model / colour parts), otherwise between words, where the two lines are most even
+    var seps = name.indexOf(' — ') > -1 ? ' — ' : ' ', parts = name.split(seps), best = 1, bestDiff = 1e9;
+    if (parts.length < 2) { seps = ' '; parts = name.split(' '); }
+    font(ctx, 13, 700);
+    for (var i = 1; i < parts.length; i++) {
+      var d = Math.abs(ctx.measureText(parts.slice(0, i).join(seps)).width - ctx.measureText(parts.slice(i).join(seps)).width);
+      if (d < bestDiff) { bestDiff = d; best = i; }
     }
-    for (i = 0; i < cw.length; i++) rrect(ctx, xs[i] - cw[i], top - 4, cw[i], y - top + 4, 10, null, '#111');
+    fit(ctx, parts.slice(0, best).join(seps), COL.descR, y - 7.5, { size: 13, min: 11, w: 700, maxW: w });
+    fit(ctx, parts.slice(best).join(seps), COL.descR, y + 8, { size: 13, min: 11, w: 700, maxW: w });
+  }
+  function tick(ctx, x, y) { // ✓ inside a 30px box whose top-left is x,y
+    ctx.strokeStyle = BLUE; ctx.lineWidth = 5; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    ctx.beginPath(); ctx.moveTo(x + 6, y + 16); ctx.lineTo(x + 13, y + 24); ctx.lineTo(x + 27, y + 5); ctx.stroke();
+  }
 
-    // totals + words
-    y += 26;
-    var tl = P, tw = 360;
-    [['المجموع', d.total], ['المدفوع', d.paid], ['البـاقـي', d.remaining]].forEach(function (r, j) {
-      var yy = y + j * 70;
-      text(ctx, r[0], tl + tw + 120, yy + 29, { size: 28, w: 900 });
-      rrect(ctx, tl, yy, tw, 58, 10, null, '#111');
-      text(ctx, money(r[1]), tl + tw - 16, yy + 30, { size: 28, w: 800, align: 'right', dir: 'ltr' });
-    });
-    var wl = tl + tw + 150, ww = W - P - wl;
-    rrect(ctx, wl, y, ww, 50, 10, null, '#111'); text(ctx, 'المبلغ بالحروف', W - P - 16, y + 26, { size: 25, w: 800 });
-    ctx.font = '700 25px ' + F; var wl2 = wrap(ctx, d.words || '', ww - 30, 3);
-    rrect(ctx, wl, y + 60, ww, Math.max(80, wl2.length * 36 + 24), 10, null, '#111');
-    wl2.forEach(function (ln, j) { text(ctx, ln, W - P - 16, y + 60 + 30 + j * 36, { size: 25, w: 700 }); });
+  var tplImg = null;
+  function loadTemplate() {
+    if (!tplImg) tplImg = new Promise(function (res, rej) { var i = new Image(); i.onload = function () { res(i); }; i.onerror = function () { rej(new Error('تعذّر تحميل قالب الفاتورة')); }; i.src = TPL; });
+    return tplImg;
+  }
 
-    // footer
-    y += 240;
-    (d.phones || []).forEach(function (p, j) {
-      text(ctx, (p[0] || '') + ' :', W - P, y + j * 42, { size: 25, w: 800 });
-      text(ctx, p[1], W - P - 120, y + j * 42, { size: 28, w: 800, dir: 'ltr' });
+  function drawPage(img, d, page, pages) {
+    var c = document.createElement('canvas'); c.width = 1024 * S; c.height = 1536 * S;
+    var ctx = c.getContext('2d'); ctx.scale(S, S);
+    ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, 1024, 1536); ctx.drawImage(img, 0, 0, 1024, 1536);
+
+    // invoice number (+ page n of m)
+    fit(ctx, d.number, 396, 249, { size: 30, min: 16, w: 900, color: BLUE, align: 'center', dir: 'ltr', maxW: 150 });
+    if (pages > 1) fit(ctx, 'صفحة ' + (page + 1) + ' من ' + pages, 543, 214, { size: 16, w: 800, align: 'center' });
+    // cash / credit
+    if (d.credit) tick(ctx, 39, 212); else tick(ctx, 162, 212);
+    // date dd / mm / yyyy (written right-to-left into the three blanks)
+    var dt = String(d.date || '').split('/');
+    if (dt.length === 3) {
+      fit(ctx, dt[0], 189, 297, { size: 22, w: 800, align: 'center', dir: 'ltr' });
+      fit(ctx, dt[1], 121, 297, { size: 22, w: 800, align: 'center', dir: 'ltr' });
+      fit(ctx, dt[2], 50, 297, { size: 22, w: 800, align: 'center', dir: 'ltr' });
+    }
+    // customer (name only — the phone has its own line at the bottom)
+    fit(ctx, d.customer, 872, 297, { size: 24, min: 14, w: 800, maxW: 540 });
+
+    // rows
+    var rows = (d.rows || []).slice(page * ROWS, page * ROWS + ROWS);
+    rows.forEach(function (r, k) {
+      var y = (LINES[k] + LINES[k + 1]) / 2 + 1;
+      desc(ctx, r.name, y);
+      fit(ctx, r.qty, COL.qty, y, { size: 20, w: 800, align: 'center', dir: 'ltr', maxW: 76 });
+      var u = split(r.unit), t = split(r.total);
+      fit(ctx, u[0], COL.uD, y, { size: 19, min: 12, w: 800, align: 'center', dir: 'ltr', maxW: 80 });
+      fit(ctx, u[1], COL.uH, y, { size: 19, w: 700, align: 'center', dir: 'ltr' });
+      fit(ctx, t[0], COL.tD, y, { size: 19, min: 12, w: 800, align: 'center', dir: 'ltr', maxW: 90 });
+      fit(ctx, t[1], COL.tH, y, { size: 19, w: 700, align: 'center', dir: 'ltr' });
     });
-    text(ctx, 'التوقيع والختم', P + 150, y, { size: 26, w: 800, align: 'center' });
-    ctx.strokeStyle = '#111'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(P, y + 50); ctx.lineTo(P + 300, y + 50); ctx.stroke();
-    text(ctx, 'طريقة الدفع: ' + (d.payment || '') + (d.pickup ? ' · ' + d.pickup : ''), W - P, H - 26, { size: 20, w: 600, color: '#5b6573' });
+
+    if (page > 0) { // the paper is numbered 1–20: continuation pages carry on 21, 22, …
+      for (var k = 0; k < ROWS; k++) {
+        var yy = (LINES[k] + LINES[k + 1]) / 2 + 1;
+        ctx.fillStyle = '#fff'; ctx.fillRect(941, LINES[k] + 4, 50, LINES[k + 1] - LINES[k] - 7);
+        fit(ctx, page * ROWS + k + 1, COL.m, yy, { size: 19, w: 800, align: 'center', dir: 'ltr' });
+      }
+    }
+    var last = page === pages - 1;
+    if (last) {
+      fit(ctx, money(d.total), 146, 1176, { size: 22, min: 14, w: 900, align: 'center', maxW: 220 });
+      fit(ctx, money(d.paid), 146, 1227, { size: 21, min: 14, w: 800, align: 'center', maxW: 220 });
+      fit(ctx, money(d.remaining), 146, 1278, { size: 21, min: 14, w: 800, align: 'center', maxW: 220, color: d.remaining > 0 ? '#c62828' : NAVY });
+      // amount in words: one line (shrunk if needed), otherwise two lines inside the box
+      var words = String(d.words || ''), maxW = 370, sz = 19;
+      font(ctx, sz, 800); while (ctx.measureText(words).width > maxW && sz > 13) { sz -= 1; font(ctx, sz, 800); }
+      if (ctx.measureText(words).width <= maxW) fit(ctx, words, 806, 1177, { size: sz, w: 800 });
+      else {
+        var parts = words.split(' '), mid = Math.ceil(parts.length / 2);
+        fit(ctx, parts.slice(0, mid).join(' '), 806, 1168, { size: 14, min: 11, w: 800, maxW: maxW });
+        fit(ctx, parts.slice(mid).join(' '), 806, 1187, { size: 14, min: 11, w: 800, maxW: maxW });
+      }
+    } else {
+      fit(ctx, 'يتبع في الصفحة التالية ←', 805, 1177, { size: 18, w: 800, maxW: 368 });
+    }
+    // phone line (the template's address line — orders are picked up from the shop)
+    fit(ctx, 'الهاتف :', 996, 1412, { size: 23, w: 800 });
+    fit(ctx, d.phone, 698, 1408, { size: 23, w: 800, align: 'center', dir: 'ltr', maxW: 360 });
+    if (d.pickup) fit(ctx, '📍 ' + d.pickup, 995, 1232, { size: 15, min: 11, w: 700, maxW: 560, color: '#4a5468' });
     return c;
   }
 
-  function toBlob(c) { return new Promise(function (res) { c.toBlob(res, 'image/png'); }); }
+  function render(d) {
+    var fontsReady = document.fonts && document.fonts.load
+      ? Promise.all([document.fonts.load('900 30px Cairo'), document.fonts.load('700 20px Cairo'), document.fonts.load('800 20px Cairo')]).catch(function () {})
+      : Promise.resolve();
+    return Promise.all([loadTemplate(), fontsReady]).then(function (r) {
+      var pages = Math.max(1, Math.ceil((d.rows || []).length / ROWS)), out = [];
+      for (var p = 0; p < pages; p++) out.push(drawPage(r[0], d, p, pages));
+      return Promise.all(out.map(function (c) { return new Promise(function (res) { c.toBlob(res, 'image/png'); }); }));
+    });
+  }
 
   window.KAInvoice = {
-    draw: draw,
+    render: render,
     attach: function (el) {
-      if (!el) return;
-      var d = JSON.parse(el.dataset.json); var ready = null; var fileName = 'فاتورة-' + d.number + '.png';
-      var build = function () {
-        if (!ready) ready = (document.fonts && document.fonts.load ? Promise.all([document.fonts.load('900 40px Cairo'), document.fonts.load('700 26px Cairo')]).catch(function () {}) : Promise.resolve())
-          .then(function () { var c = draw(d); return toBlob(c).then(function (b) { return { canvas: c, blob: b }; }); });
-        return ready;
+      if (!el) return null;
+      var d = JSON.parse(el.dataset.json), ready = null, urls = [];
+      var name = function (i, n) { return 'فاتورة-' + d.number + (n > 1 ? '-' + (i + 1) : '') + '.png'; };
+      var build = function () { if (!ready) ready = render(d); return ready; };
+      var show = function () {
+        return build().then(function (blobs) {
+          urls.forEach(function (u) { URL.revokeObjectURL(u); });
+          urls = blobs.map(function (b) { return URL.createObjectURL(b); });
+          document.querySelectorAll('[data-inv-preview]').forEach(function (img) { img.src = urls[0]; img.hidden = false; });
+          document.querySelectorAll('[data-inv-sheets]').forEach(function (box) {
+            box.innerHTML = '';
+            urls.forEach(function (u, i) { var im = new Image(); im.src = u; im.alt = 'الفاتورة ' + d.number + (urls.length > 1 ? ' — صفحة ' + (i + 1) : ''); im.className = 'sheet'; box.appendChild(im); });
+          });
+        }).catch(function (e) {
+          document.querySelectorAll('[data-inv-sheets]').forEach(function (box) { box.textContent = e.message + ' — حدّث الصفحة.'; });
+        });
       };
-      build().then(function (r) {
-        document.querySelectorAll('[data-inv-preview]').forEach(function (img) { img.src = URL.createObjectURL(r.blob); img.hidden = false; });
-      });
-      var download = function (blob) { var a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = fileName; document.body.appendChild(a); a.click(); a.remove(); };
+      var download = function (blob, fn) { var a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = fn; document.body.appendChild(a); a.click(); a.remove(); };
+      show();
       document.addEventListener('click', function (e) {
         var sh = e.target.closest('[data-inv-share]'), dl = e.target.closest('[data-inv-download]');
         if (!sh && !dl) return;
         e.preventDefault();
-        build().then(function (r) {
-          if (dl) return download(r.blob);
-          var file = new File([r.blob], fileName, { type: 'image/png' });
+        build().then(function (blobs) {
+          if (dl) { blobs.forEach(function (b, i) { download(b, name(i, blobs.length)); }); return; }
+          var files = blobs.map(function (b, i) { return new File([b], name(i, blobs.length), { type: 'image/png' }); });
           var text = 'فاتورة رقم ' + d.number + ' — ' + d.customer + ' — الإجمالي ' + money(d.total);
-          if (navigator.canShare && navigator.canShare({ files: [file] })) {
-            navigator.share({ files: [file], text: text, title: 'فاتورة ' + d.number }).catch(function () {});
+          if (navigator.canShare && navigator.canShare({ files: files })) {
+            navigator.share({ files: files, text: text, title: 'فاتورة ' + d.number }).catch(function () {});
           } else {
-            // desktop / older phones: save the picture, then open WhatsApp so it can be attached
-            download(r.blob);
+            // computers / older phones: save the picture, then open the shop chat so it can be attached
+            blobs.forEach(function (b, i) { download(b, name(i, blobs.length)); });
             var n = (el.dataset.wa || '').split(',')[0];
-            if (n) { if (n.charAt(0) === '0') n = '218' + n.slice(1); window.open('https://wa.me/' + n + '?text=' + encodeURIComponent(text + '\n(صورة الفاتورة محفوظة على جهازك، أرفقها هنا)'), '_blank', 'noopener'); }
+            if (n) window.open('https://wa.me/' + n + '?text=' + encodeURIComponent(text + '\n(صورة الفاتورة محفوظة على جهازك، أرفقها هنا)'), '_blank', 'noopener');
           }
         });
       });
+      return {
+        data: d,
+        update: function (patch) {
+          Object.keys(patch).forEach(function (k) { d[k] = patch[k]; });
+          d.remaining = Math.round((d.total - d.paid) * 1000) / 1000;
+          ready = null; return show();
+        },
+      };
     },
   };
-  document.addEventListener('DOMContentLoaded', function () { window.KAInvoice.attach(document.getElementById('inv-data')); });
+  document.addEventListener('DOMContentLoaded', function () { window.KAInvoiceCtl = window.KAInvoice.attach(document.getElementById('inv-data')); });
 })();

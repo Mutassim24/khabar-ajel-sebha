@@ -58,7 +58,29 @@
     const it = cart.find((x) => x.id === id);
     if (it) it.qty = Math.min(999, it.qty + qty); else cart.push({ id, qty });
     saveCart();
-    if (!silent) { toast('تمت الإضافة إلى السلة ✓'); refreshCart(); }
+    if (!silent) { cartBar(); refreshCart(); }
+  }
+  // after adding: stay on the page and show the running count + total, with a shortcut to checkout
+  let cartBarTimer;
+  async function cartBar() {
+    let bar = $('.cartbar');
+    if (!bar) {
+      bar = document.createElement('div'); bar.className = 'cartbar'; bar.setAttribute('role', 'status');
+      bar.innerHTML = '<div class="cb-txt"><b>✓ تمت الإضافة إلى السلة</b><span data-cb-sum></span></div><a class="btn primary sm" href="/checkout">إتمام الشراء</a><button type="button" class="cb-x" aria-label="إغلاق">✕</button>';
+      bar.querySelector('.cb-x').onclick = () => bar.classList.remove('show');
+      bar.addEventListener('mouseenter', () => clearTimeout(cartBarTimer));
+      document.body.appendChild(bar);
+    }
+    const n = cart.reduce((a, x) => a + x.qty, 0);
+    const sum = bar.querySelector('[data-cb-sum]');
+    const pcs = (k) => (k === 1 ? 'قطعة واحدة' : k === 2 ? 'قطعتان' : k <= 10 ? `${k} قطع` : `${k} قطعة`);
+    sum.textContent = `في السلة ${pcs(n)}`;
+    requestAnimationFrame(() => bar.classList.add('show'));
+    clearTimeout(cartBarTimer); cartBarTimer = setTimeout(() => bar.classList.remove('show'), 7000);
+    try {
+      const q = await api('/api/quote', { items: cart });
+      sum.textContent = `في السلة ${pcs(q.count)} · المجموع ${money(q.subtotal)}`;
+    } catch (_) { /* the count alone is fine when offline */ }
   }
   function setQty(id, qty) {
     id = Number(id);
@@ -153,7 +175,7 @@
     const addQty = e.target.closest('[data-add-qty]');
     if (addQty && !addQty.disabled) {
       const qty = Number($('[data-qty]')?.value) || 1;
-      addToCart(addQty.dataset.addQty, qty, true); toast('تمت الإضافة إلى السلة ✓'); openCart();
+      addToCart(addQty.dataset.addQty, qty);
     }
     const buyNow = e.target.closest('[data-buy-now]');
     if (buyNow) { addToCart(buyNow.dataset.buyNow, Number($('[data-qty]')?.value) || 1, true); location.href = '/checkout'; }

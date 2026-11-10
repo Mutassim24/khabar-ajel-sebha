@@ -1,3 +1,4 @@
+@font-face{font-family:Cairo;src:url(/fonts/cairo.woff?v=1) format('woff');font-weight:200 1000;font-style:normal;font-display:swap}
 :root{--navy:#0f2240;--navy2:#16325e;--blue:#2563eb;--blue-50:#eef4ff;--orange:#ff7a1a;--ink:#142033;--ink2:#3a4860;--muted:#6b7a90;--line:#e3e8f0;--bg:#f3f5f9;--green:#15803d;--green-50:#e9f7ee;--red:#d92d20;--red-50:#fdecea;--amber:#b45309;--amber-50:#fff4e5;--violet:#6d28d9;--violet-50:#f3edff;--r:14px;--card:#fff;--title:#0f2240}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--ink);font-family:'Cairo',Tahoma,sans-serif;font-size:14px;line-height:1.6}

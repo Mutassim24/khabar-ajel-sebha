@@ -222,10 +222,13 @@ async function req(method, url, body, headers = {}) {
       await page.fill('[data-qty]', '10'); await page.dispatchEvent('[data-qty]', 'change');
       assert.match(await page.textContent('[data-unit-note]'), /سعر الجملة مطبّق/);
       await page.fill('[data-qty]', '1'); await page.dispatchEvent('[data-qty]', 'change');
-      await page.click('[data-add-qty]'); await page.waitForSelector('#cartDrawer.open .line');
+      await page.click('[data-add-qty]'); await page.waitForSelector('.cartbar.show');
+      await page.waitForFunction(() => /المجموع/.test(document.querySelector('[data-cb-sum]').textContent));
+      assert.ok(!(await page.$('#cartDrawer.open')), 'stays on the product page — no cart drawer');
+      assert.match(page.url(), /\/product\//);
       assert.equal(await page.textContent('.bottom-nav [data-cart-count]'), '1');
-      await shot(page, 'mobile-cart-drawer');
-      await page.click('[data-close-cart] svg').catch(() => page.click('.drawer-head button'));
+      await shot(page, 'mobile-added-bar');
+      await page.click('.cartbar .cb-x');
     });
     await t('mobile: favorites toggle and favorites page', async () => {
       await page.goto(BASE + '/shop');

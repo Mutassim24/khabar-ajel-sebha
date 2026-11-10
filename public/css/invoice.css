@@ -1,55 +1,22 @@
-/* Invoice — same layout as the shop's paper invoice; A5/A4 printable */
+@font-face{font-family:Cairo;src:url(/fonts/cairo.woff?v=1) format('woff');font-weight:200 1000;font-style:normal;font-display:swap}
 *{box-sizing:border-box}
-body{margin:0;background:#e9edf3;font-family:Cairo,system-ui,sans-serif;color:#111;-webkit-print-color-adjust:exact;print-color-adjust:exact}
-.bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:center;padding:10px;background:#0f2240}
-.bar a,.bar button{font:700 14px Cairo,sans-serif;border:0;border-radius:10px;padding:9px 14px;background:#fff;color:#0f2240;text-decoration:none;cursor:pointer}
-.bar button[data-print]{background:#ff7a1a;color:#fff}.bar button.share{background:#25d366;color:#fff}.bar button[data-save]{background:#1f9d55;color:#fff}
-.bar .msg{color:#fff;font-weight:700}
-.inv{width:780px;transform-origin:top center;margin:16px auto;background:#fff;padding:22px 22px 16px;border-radius:6px;box-shadow:0 6px 30px #0f224026}
-.top{display:flex;justify-content:space-between;align-items:flex-start;gap:16px}
-.shop h1{margin:0;font-size:38px;font-weight:900;letter-spacing:2px;line-height:1.2}
-.shop .sub{margin:4px 0 0;font-weight:700;font-size:15px}.shop .tag{margin:0;font-weight:700;font-size:15px;text-align:center}
-.brands{display:flex;flex-direction:column;align-items:flex-end;gap:2px;direction:ltr;text-align:left}
-.brands span{font:900 22px/1.15 Arial,sans-serif;letter-spacing:1px}
-.brands span:first-child{font-size:30px}
-.row2{display:grid;grid-template-columns:1fr auto auto;gap:14px;align-items:center;margin-top:12px}
-.addr{font-weight:800;font-size:16px}
-.num{display:flex;align-items:center;gap:10px}.num small{font-weight:800;font-size:12px;line-height:1.2;text-align:center}.num small i{font-style:normal;letter-spacing:2px}
-.num b{color:#d0021b;font:700 24px "Courier New",monospace;letter-spacing:1px;white-space:nowrap}
-.terms{display:flex;gap:14px;font-weight:800;align-items:center}.terms label{display:flex;align-items:center;gap:5px;cursor:pointer}
-.terms input{width:18px;height:18px;accent-color:#111}
-.box{display:inline-block;width:16px;height:16px;border:2px solid #111;vertical-align:middle;margin-inline:4px 2px;position:relative}
-.box.on::after{content:"✓";position:absolute;inset:-6px 0 0 1px;font-size:16px;font-weight:900}
-.who{display:grid;grid-template-columns:auto 1fr auto 150px;gap:8px;align-items:center;margin:14px 0 12px}
-.lbl{border:1.5px solid #111;border-radius:6px;padding:4px 10px;font-weight:800;white-space:nowrap}.lbl.plain{border:0;padding:0}
-.fld{border:1.5px solid #111;border-radius:6px;min-height:36px;padding:5px 10px;font-weight:700;display:flex;align-items:center}
-.items{width:100%;border-collapse:separate;border-spacing:4px 0;table-layout:fixed}
-.items col.c-m{width:34px}.items col.c-q{width:62px}.items col.c-d{width:66px}.items col.c-h{width:52px}
-.items thead th{background:#111;color:#fff;font-weight:800;font-size:15px;padding:8px 4px;border-radius:8px 8px 0 0}
-.items thead tr:nth-child(2) th{background:#fff;color:#111;border:1.5px solid #111;border-top:0;border-radius:0;font-size:12.5px;padding:3px}
-.items thead tr:first-child th[rowspan]{border-radius:8px}
-.items td{border-inline:1.5px solid #111;border-bottom:1px solid #9aa3ae;height:30px;min-height:30px;padding:2px 6px;font-weight:700;font-size:13.5px;vertical-align:middle}
-.items tbody tr:last-child td{border-bottom:1.5px solid #111}
-.items td.m{text-align:center;font-weight:800}
-.items td.desc{overflow-wrap:anywhere;line-height:1.35}.items td.desc small{color:#5b6573;font-weight:600;font-size:11px}
-.items td.q,.items td.dn,.items td.dh{text-align:center;font-variant-numeric:tabular-nums}
-.items td.dh{color:#444;font-size:12.5px}
-.sums{display:grid;grid-template-columns:1fr 260px;gap:14px;margin-top:14px;align-items:start}
-.words{display:grid;gap:6px}.words .fld{min-height:44px;line-height:1.6}
-.totals{display:grid;gap:8px}
-.totals div{display:grid;grid-template-columns:72px 1fr;align-items:center;gap:8px}
-.totals span{font-weight:900;font-size:16px}
-.totals b{border:1.5px solid #111;border-radius:6px;padding:5px 10px;min-height:36px;display:flex;align-items:center;gap:6px;font-variant-numeric:tabular-nums;direction:ltr;justify-content:flex-end}
-.totals input{width:100%;border:0;font:800 15px Cairo,sans-serif;text-align:right;background:#fff8e6;border-radius:4px;padding:2px 6px}
-.foot{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;margin-top:18px}
-.phones{font:800 17px/1.6 Arial,sans-serif}.phones span{font-family:Cairo,sans-serif;font-size:15px}
-.sign{font-weight:800;text-align:center;min-width:200px}.sign i{display:block;border-top:1.5px solid #111;margin-top:26px}
-.meta{margin:12px 0 0;color:#5b6573;font-size:12px}
+body{margin:0;background:#e9edf3;font-family:Cairo,"Segoe UI",Tahoma,sans-serif;color:#011639}
+.bar,.adm{display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:center;padding:10px;background:#fff;border-bottom:1px solid #d7dde7;position:sticky;top:0;z-index:2}
+.adm{position:static;font-weight:700}
+.bar a,.bar button,.adm button{font:inherit;font-weight:700;border:1px solid #c8d0dc;background:#fff;color:#011639;border-radius:10px;padding:8px 14px;cursor:pointer;text-decoration:none;font-size:14px}
+.bar button.share{background:#16a34a;border-color:#16a34a;color:#fff}
+.adm input[type=text]{width:110px;font:inherit;padding:6px 8px;border:1px solid #c8d0dc;border-radius:8px}
+.adm label{display:inline-flex;gap:6px;align-items:center}
+.msg{font-size:14px;color:#16a34a}
+.sheets{max-width:820px;margin:12px auto;padding:0 8px;display:grid;gap:14px}
+.sheets .sheet{display:block;width:100%;height:auto;background:#fff;border-radius:6px;box-shadow:0 2px 14px rgba(1,22,57,.15)}
+.loading{text-align:center;padding:60px 0;font-weight:700}
+.sr-only{position:absolute;top:0;right:0;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
 @media print{
-  @page{size:A4;margin:10mm}
-  body{background:#fff}.no-print{display:none!important}
-  .inv{box-shadow:none;margin:0;width:100%;padding:0}
-  .totals input{background:transparent}
+  @page{size:A5 portrait;margin:0}
+  body{background:#fff}
+  .no-print{display:none!important}
+  .sheets{max-width:none;margin:0;padding:0;gap:0}
+  .sheets .sheet{box-shadow:none;border-radius:0;width:100%;height:auto;page-break-after:always;break-after:page}
+  .sheets .sheet:last-child{page-break-after:auto;break-after:auto}
 }
-.fld .ph{margin-inline-start:auto;font-weight:600;color:#333}
-body{overflow-x:hidden}@media print{.inv{zoom:1!important}}

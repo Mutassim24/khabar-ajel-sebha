@@ -804,17 +804,7 @@
             <label class="chk"><input type="checkbox" name="delivery_enabled" ${s.delivery_enabled === true ? 'checked' : ''}> عندنا خدمة توصيل (لو مش معلّم: الاستلام من المحل فقط)</label>
             <label class="l" style="margin-top:8px">نص الاستلام من المحل<input name="pickup_label" value="${s.pickup_label || ''}"></label></div>
           <div class="card"><h2>👤 حسابات الزبائن</h2><label class="chk"><input type="checkbox" name="require_account" ${s.require_account !== false ? 'checked' : ''}> لازم الزبون يسوّي حساب أو يسجّل دخول قبل الشراء</label><p class="small muted">الحساب يحفظ اسمه ورقمه وعنوانه وفواتيره، والاسم يظهر في الفاتورة ورسالة الواتساب.</p></div>
-          <div class="card"><h2>🧾 الفاتورة المطبوعة</h2><div class="fg">
-            <label class="l">اسم المحل في الفاتورة<input name="invoice_title" value="${s.invoice_title || ''}"></label>
-            <label class="l">جملة - قطاعي<input name="invoice_tagline" value="${s.invoice_tagline || ''}"></label>
-            <label class="l full">النشاط<input name="invoice_subtitle" value="${s.invoice_subtitle || ''}"></label>
-            <label class="l full">العنوان<input name="invoice_address" value="${s.invoice_address || ''}"></label>
-            <label class="l full">الماركات (مفصولة بفاصلة)<input name="invoice_brands" dir="ltr" value="${s.invoice_brands || ''}"></label>
-            <label class="l">المدينة 1<input name="invoice_city_1" value="${s.invoice_city_1 || ''}"></label>
-            <label class="l">أرقام المدينة 1<input name="invoice_phones_1" dir="ltr" value="${s.invoice_phones_1 || ''}"></label>
-            <label class="l">المدينة 2<input name="invoice_city_2" value="${s.invoice_city_2 || ''}"></label>
-            <label class="l">أرقام المدينة 2<input name="invoice_phones_2" dir="ltr" value="${s.invoice_phones_2 || ''}"></label>
-          </div></div>
+          <div class="card"><h2>🧾 الفاتورة</h2><p class="small muted">الفاتورة تُعبّأ تلقائياً على نفس الفاتورة الورقية للمحل (20 سطر، نقداً/آجلاً، المبلغ بالحروف). من صفحة أي طلب ← «الفاتورة» تقدر تحدد المدفوع ونقداً أو آجلاً.</p></div>
           <div class="card"><h2>الجملة و SEO</h2><div class="fg">
             <label class="l full">ملاحظة الجملة<input name="wholesale_note" value="${s.wholesale_note}"></label>
             <label class="l full">وصف المتجر لمحركات البحث<textarea name="seo_description" rows="3">${s.seo_description}</textarea></label>

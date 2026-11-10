@@ -54,16 +54,18 @@ function register(r) {
     sendHtml(req, res, 200, views.checkoutPage(req, c), { 'Cache-Control': 'no-store' });
   });
   r.get('/favorites', (req, res) => sendHtml(req, res, 200, views.favoritesPage(req)));
+  // the logged-in customer can open their own orders without the link token
+  const ownsOrder = (req, row) => { const c = row.customer_id ? currentCustomer(req) : null; return !!(c && c.id === row.customer_id); };
   r.get('/order/:number', (req, res, params) => {
-    const row = get('SELECT id, token FROM orders WHERE number = ?', params.number);
-    if (!row || !req.query.t || req.query.t !== row.token) return sendHtml(req, res, 404, views.notFound(req));
+    const row = get('SELECT id, token, customer_id FROM orders WHERE number = ?', params.number);
+    if (!row || !(ownsOrder(req, row) || (req.query.t && req.query.t === row.token))) return sendHtml(req, res, 404, views.notFound(req));
     sendHtml(req, res, 200, views.orderSuccess(req, store.getOrder(row.id)));
   });
   // printable invoice: the customer (order token) or any logged-in admin
   r.get('/invoice/:number', (req, res, params) => {
-    const row = get('SELECT id, token FROM orders WHERE number = ?', params.number);
+    const row = get('SELECT id, token, customer_id FROM orders WHERE number = ?', params.number);
     const admin = currentAdmin(req);
-    if (!row || (!admin && (!req.query.t || req.query.t !== row.token))) return sendHtml(req, res, 404, views.notFound(req));
+    if (!row || (!admin && !ownsOrder(req, row) && (!req.query.t || req.query.t !== row.token))) return sendHtml(req, res, 404, views.notFound(req));
     sendHtml(req, res, 200, invoicePage({ order: store.getOrder(row.id), settings: getSettings(), isAdmin: !!admin }), { 'Cache-Control': 'no-store', 'X-Robots-Tag': 'noindex' });
   });
   r.get('/track', (req, res) => {
@@ -190,8 +192,8 @@ function register(r) {
   r.post('/api/account/logout', (req, res) => { sameOrigin(req); clearCustomerCookie(req, res); sendJson(req, res, 200, { ok: true }); });
   r.post('/api/account/profile', async (req, res) => {
     sameOrigin(req); const c = currentCustomer(req); if (!c) throw new HttpError(401, 'سجّل الدخول أولاً');
-    const d = validate(await jsonBody(req, 8 * 1024), { name: { type: 'string', required: true, min: 2, max: 80, label: 'الاسم' }, city: { type: 'string', max: 80 }, address: { type: 'string', max: 300 } });
-    run("UPDATE customers SET name = ?, city = ?, address = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id = ?", d.name, d.city || null, d.address || null, c.id);
+    const body = await jsonBody(req, 8 * 1024); const d = validate(body, { name: { type: 'string', required: true, min: 2, max: 80, label: 'الاسم' }, city: { type: 'string', max: 80 }, address: { type: 'string', max: 300 } });
+    run("UPDATE customers SET name = ?, city = ?, address = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id = ?", d.name, body && 'city' in body ? d.city : c.city, body && 'address' in body ? d.address : c.address, c.id); // fields hidden on the form keep their value
     sendJson(req, res, 200, { ok: true });
   });
   r.post('/api/account/password', async (req, res) => {

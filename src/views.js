@@ -113,8 +113,7 @@ ${image ? html`<meta property="og:image" content="${base + image}">` : ''}
 <meta name="twitter:card" content="summary_large_image">
 <link rel="icon" href="/img/favicon.svg" type="image/svg+xml">
 <link rel="manifest" href="/manifest.webmanifest">
-<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800;900&display=swap">
+<link rel="preload" href="/fonts/cairo.woff?v=1" as="font" type="font/woff" crossorigin>
 <script src="${asset('/js/theme.js')}"></script>
 <link rel="stylesheet" href="${asset('/css/store.css')}">
 <script type="application/ld+json">${raw(JSON.stringify(orgLd).replace(/</g, '\\u003c'))}</script>
@@ -128,7 +127,7 @@ ${s.topline ? html`<div class="topline">${s.topline}</div>` : ''}
   <div class="wrap header-row">
     <a class="brand" href="/" aria-label="${s.store_name} — الرئيسية">${brandMark(s)}<span><b>${s.store_name}</b><small>${s.tagline}</small></span></a>
     <form class="search" action="/shop" method="get" role="search" autocomplete="off">
-      <input type="search" name="q" value="${req.query.q || ''}" placeholder="ابحث: شاحن سامسونج، جراب ايفون 15، سماعة..." aria-label="بحث المنتجات" data-suggest>
+      <input type="search" name="q" value="${req.query.q || ''}" placeholder="ابحث: شاحن سامسونج، كفر آيفون 15، سماعة..." aria-label="بحث المنتجات" data-suggest>
       <button type="submit" aria-label="بحث">${icons.search}</button>
       <div class="suggest" hidden></div>
     </form>
@@ -162,7 +161,7 @@ ${s.announcement ? html`<div class="announce wrap">${s.announcement}</div>` : ''
     </div>
     <div><b>تسوّق</b><a href="/shop">كل المنتجات</a><a href="/shop?sale=1">العروض والخصومات</a><a href="/shop?sort=bestsellers">الأكثر مبيعاً</a><a href="/shop?wholesale=1">منتجات الجملة</a></div>
     <div><b>الأقسام</b>${cats.slice(0, 6).map((c) => html`<a href="/category/${c.slug}">${c.name}</a>`)}</div>
-    <div><b>خدمة العملاء</b><a href="/page/about">من نحن</a><a href="/page/shipping">الشحن والاستبدال</a><a href="/page/privacy">سياسة الخصوصية</a><a href="/page/contact">اتصل بنا</a><a href="/track">تتبع طلبك</a></div>
+    <div><b>خدمة العملاء</b><a href="/page/about">من نحن</a><a href="/page/shipping">الاستلام والاستبدال</a><a href="/page/privacy">سياسة الخصوصية</a><a href="/page/contact">اتصل بنا</a><a href="/track">تتبع طلبك</a></div>
   </div>
   <div class="wrap copyright">© ${new Date().getFullYear()} ${s.store_name} · جميع الحقوق محفوظة · الأسعار بالدينار الليبي</div>
 </footer>
@@ -308,7 +307,7 @@ function shop(req, d) {
       ${d.subs.map((c) => html`<a href="${qs('/category/' + c.slug, keep)}" class="${d.category.id === c.id ? 'on' : ''}">${c.cover_id ? html`<img src="${img(c.cover_id, 160)}" alt="" loading="lazy" width="28" height="28">` : ''}${c.name} <small>${c.product_count}</small></a>`)}
     </nav>` : ''}
     ${d.category && d.category.name === 'وصلة (خيط شحن)' ? html`<nav class="subcats plugs" aria-label="نوع المدخل"><span>نوع المدخل:</span>
-      ${[['', 'الكل'], ['تايب سي', 'Type-C'], ['ايفون', 'ايفون (لايتننق)'], ['مايكرو', 'مايكرو (عادي)']].map(([q, l]) => html`<a href="${qs('/category/' + d.category.slug, { ...keep, q })}" class="${(f.q || '') === q ? 'on' : ''}">${l}</a>`)}
+      ${[['', 'الكل'], ['تايب سي', 'تايب سي'], ['ايفون', 'آيفون (لايتنينغ)'], ['مايكرو', 'مايكرو (عادي)']].map(([q, l]) => html`<a href="${qs('/category/' + d.category.slug, { ...keep, q })}" class="${(f.q || '') === q ? 'on' : ''}">${l}</a>`)}
     </nav>` : ''}
     ${d.category && d.category.description ? html`<p class="cat-desc">${d.category.description}</p>` : ''}
     ${grid(d.result.items, f.q ? 'لم نجد منتجات مطابقة. جرّب كلمات أخرى مثل: شاحن، كابل، جراب، سماعة.' : 'لا توجد منتجات مطابقة لهذه التصفية.')}
@@ -455,7 +454,7 @@ function checkoutPage(req, cust) {
     <p class="coupon-msg" data-coupon-msg hidden></p>
     <p class="form-error" data-form-error hidden></p>
     <button class="btn wa block lg" type="submit" data-submit>${icons.wa} شراء وإرسال الفاتورة عبر واتساب</button>
-    <p class="muted small center">يتم حفظ الطلب وفتح واتساب برسالة فيها الفاتورة كاملة. بالشراء أنت توافق على <a href="/page/shipping">سياسة الشحن والاستبدال</a>.</p>
+    <p class="muted small center">يتم حفظ الطلب وتجهيز صورة الفاتورة لترسلها لنا على واتساب. بالشراء أنت توافق على <a href="/page/shipping">سياسة الاستلام والاستبدال</a>.</p>
   </aside>
 </form></div>`;
   return layout(req, { title: 'الفاتورة وإتمام الشراء', body, noindex: true, bodyClass: 'is-checkout' });
@@ -483,19 +482,20 @@ function authPage(req, { mode, next }) {
   return layout(req, { title: reg ? 'إنشاء حساب' : 'تسجيل الدخول', body, noindex: true, active: 'account' });
 }
 
+const pieces = (n) => (n === 1 ? 'قطعة واحدة' : n === 2 ? 'قطعتان' : n >= 3 && n <= 10 ? `${n} قطع` : `${n} قطعة`);
 function accountPage(req, { customer: c, orders }) {
   const s = getSettings();
   const body = html`<div class="wrap narrow">
 <div class="acc-head"><span class="acc-av">${c.name.trim().charAt(0)}</span><div><h1>${c.name}</h1><span dir="ltr" class="muted">${c.phone}</span></div><button class="btn ghost sm" type="button" data-logout>تسجيل الخروج</button></div>
 <section class="panel"><h2>🧾 طلباتي وفواتيري</h2>
-${orders.length ? html`<div class="acc-orders">${orders.map((o) => html`<div class="acc-o"><div><b dir="ltr">${o.number}</b><small>${new Date(o.created_at).toLocaleDateString('ar-LY', { timeZone: 'Africa/Tripoli' })} · ${o.items || 0} قطعة</small></div><span class="pill st-${o.status}">${STATUS[o.status] || o.status}</span><b>${money(o.total)}</b><a class="btn sm" href="/invoice/${o.number}?t=${o.token}">الفاتورة</a></div>`)}</div>`
+${orders.length ? html`<div class="acc-orders">${orders.map((o) => html`<div class="acc-o"><a class="acc-main" href="/order/${o.number}?t=${o.token}"><span><b dir="ltr">${o.number}</b><small>${new Date(o.created_at).toLocaleDateString('ar-LY', { timeZone: 'Africa/Tripoli' })} · ${pieces(o.items || 0)}</small></span><span class="pill st-${o.status}">${STATUS[o.status] || o.status}</span><b class="acc-total">${money(o.total)}</b></a><div class="acc-act"><a class="btn ghost sm" href="/order/${o.number}?t=${o.token}">📦 تفاصيل الطلب</a><a class="btn primary sm" href="/invoice/${o.number}?t=${o.token}">🧾 الفاتورة</a></div></div>`)}</div>`
   : html`<div class="empty-box sm"><p>ما عندك طلبات لسا</p><a class="btn primary sm" href="/shop">تسوّق الآن</a></div>`}
 </section>
 <section class="panel"><h2>بياناتي</h2>
   <form id="profileForm" class="fields" novalidate>
     <label>الاسم *<input name="name" required maxlength="80" value="${c.name}"></label>
     ${delivers() ? html`<label>المدينة / المنطقة<select name="city"><option value="">—</option>${(s.shipping_zones || []).map((z) => html`<option ${c.city === z.name ? raw('selected') : ''}>${z.name}</option>`)}</select></label>` : ''}
-    <label class="full">العنوان<textarea name="address" rows="2" maxlength="300">${c.address || ''}</textarea></label>
+    ${delivers() ? html`<label class="full">العنوان<textarea name="address" rows="2" maxlength="300">${c.address || ''}</textarea></label>` : ''}
     <p class="form-error full" data-form-error hidden></p>
     <button class="btn primary" type="submit">حفظ البيانات</button>
   </form>
@@ -537,21 +537,23 @@ function orderSummary(o) {
 }
 
 function orderSuccess(req, o) {
+  const fresh = !!req.query.send;
   const body = html`<div class="wrap narrow">
-<div class="success-hero"><span class="check">✓</span><h1>تم استلام طلبك بنجاح</h1><p>شكراً لك ${o.customer_name}! سنتواصل معك على الرقم <b dir="ltr">${o.phone}</b> لتأكيد الطلب.</p></div>
+${fresh ? html`<div class="success-hero"><span class="check">✓</span><h1>تم استلام طلبك بنجاح</h1><p>شكراً لك ${o.customer_name}! سنتواصل معك على الرقم <b dir="ltr">${o.phone}</b> لتأكيد الطلب.</p></div>`
+    : html`<nav class="crumbs"><a href="/">الرئيسية</a><span>/</span><a href="/account">حسابي</a><span>/</span><b dir="ltr">${o.number}</b></nav><h1 class="page-title">طلب رقم <bdi dir="ltr">${o.number}</bdi></h1>`}
 <div class="panel wa-cta inv-cta">
-  <p><b>آخر خطوة:</b> أرسل صورة الفاتورة لنا على واتساب لتأكيد الطلب.</p>
+  <p>${fresh ? raw('<b>آخر خطوة:</b> أرسل صورة الفاتورة لنا على واتساب لتأكيد الطلب.') : 'صورة الفاتورة — تقدر ترسلها على واتساب أو تحفظها.'}</p>
   <button class="btn wa lg block" type="button" data-inv-share ${req.query.send ? raw('data-wa-auto') : ''}>${icons.wa} إرسال صورة الفاتورة عبر واتساب</button>
   <img data-inv-preview hidden alt="صورة الفاتورة" class="inv-preview">
   <div class="inv-more"><a class="btn ghost sm" href="/invoice/${o.number}?t=${o.token}">🧾 فتح الفاتورة وطباعتها</a><button class="btn ghost sm" type="button" data-inv-download>⬇ حفظ الصورة</button>${o.whatsapp_url ? html`<button class="btn ghost sm" type="button" data-wa-text="${o.whatsapp_text + '\n\n🧾 رابط الفاتورة: ' + siteUrl(req) + '/invoice/' + o.number + '?t=' + o.token}">💬 إرسالها كرسالة نصية</button>` : ''}</div>
   <p class="small muted">على التلفون: اضغط الزر الأخضر ← اختار <b>واتساب</b> ← اختار محادثة المحل وأرسل.</p>
 </div>
-<div hidden id="inv-data" data-json="${JSON.stringify(invoiceData(o, getSettings()))}" data-wa="${waNumbers(getSettings())}"></div>
-<script src="/js/invoice-img.js?v=3" defer></script>
+<div hidden id="inv-data" data-json="${JSON.stringify(invoiceData(o))}" data-wa="${waNumbers(getSettings())}"></div>
+<script src="/js/invoice-img.js?v=6" defer></script>
 ${orderSummary(o)}
 <div class="center gap"><a class="btn ghost" href="/track?number=${encodeURIComponent(o.number)}">تتبع الطلب</a><a class="btn primary" href="/shop">متابعة التسوق</a></div>
 </div>`;
-  return layout(req, { title: 'تم استلام الطلب', body, noindex: true, bodyClass: 'order-done' });
+  return layout(req, { title: fresh ? 'تم استلام الطلب' : `طلب رقم ${o.number}`, body, noindex: true, bodyClass: 'order-done' });
 }
 
 function trackPage(req, { order, error, number, phone }) {

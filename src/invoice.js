@@ -1,5 +1,5 @@
-// Printable invoice in the shop's paper layout (فاتورة خبر عاجل): items, qty, unit price, line total
-// split into دينار / درهم (1 دينار = 1000 درهم), automatic sum, paid, remaining, and the amount in words.
+// Invoice data for the shop's paper invoice (فاتورة خبر عاجل). The browser draws it onto the scanned template
+// (public/js/invoice-img.js): 20 rows per page, دينار / درهم columns (1 دينار = 1000 درهم), totals and the amount in words.
 'use strict';
 const { html, raw } = require('./util');
 
@@ -52,103 +52,56 @@ function amountInWords(v) {
 /** Shop WhatsApp numbers in international form (09x… → 2189x…). */
 const waNumbers = (s) => [s.whatsapp, s.whatsapp2].map((n) => String(n || '').replace(/\D/g, '')).filter(Boolean).map((n) => (n.startsWith('0') ? '218' + n.slice(1) : n)).join(',');
 
-/* ---------- money split ---------- */
-const split = (v) => { const t = Math.round((Number(v) || 0) * 1000); const neg = t < 0; const a = Math.abs(t); return { d: (neg ? '-' : '') + Math.floor(a / 1000).toLocaleString('en-US'), h: String(a % 1000).padStart(3, '0') }; };
-const cells = (v) => { const s = split(v); return html`<td class="dn">${s.d}</td><td class="dh">${s.h}</td>`; };
 const fmtDate = (iso) => { const d = new Date(iso); return isNaN(d) ? '' : d.toLocaleDateString('en-GB', { timeZone: 'Africa/Tripoli' }); };
 const money3 = (v) => (Math.round((Number(v) || 0) * 1000) / 1000).toLocaleString('en-US', { maximumFractionDigits: 3 });
 
 function invoiceRows(o) {
-  const rows = o.items.map((i) => ({ name: i.name + (i.price_type === 'wholesale' ? ' (جملة)' : ''), sku: i.sku, qty: i.qty, unit: i.unit_price, total: i.line_total }));
+  const rows = o.items.map((i) => ({ name: i.name + (i.price_type === 'wholesale' ? ' (جملة)' : ''), qty: i.qty, unit: i.unit_price, total: i.line_total }));
   if (o.discount > 0) rows.push({ name: 'خصم' + (o.coupon_code ? ` (${o.coupon_code})` : ''), qty: '', unit: '', total: -o.discount });
   if (o.shipping_fee > 0) rows.push({ name: `رسوم التوصيل — ${o.city || ''}`, qty: 1, unit: o.shipping_fee, total: o.shipping_fee });
   return rows;
 }
 /** Plain data for drawing the invoice as an image in the browser (sent to WhatsApp as a picture). */
-function invoiceData(o, s) {
+function invoiceData(o) {
   const paid = o.paid_amount == null ? (o.status === 'completed' ? o.total : 0) : o.paid_amount;
   return {
-    title: s.invoice_title || s.store_name, subtitle: s.invoice_subtitle || s.tagline, tagline: s.invoice_tagline || 'جملة - قطاعي', address: s.invoice_address || s.address,
-    brands: (s.invoice_brands || '').split(/[,،·]/).map((b) => b.trim()).filter(Boolean),
     number: o.number, date: fmtDate(o.created_at), customer: o.customer_name, phone: o.phone, credit: o.payment_terms === 'credit',
     rows: invoiceRows(o).map((r) => ({ name: r.name, qty: r.qty, unit: r.unit, total: r.total })),
     total: o.total, paid, remaining: Math.round((o.total - paid) * 1000) / 1000, words: amountInWords(o.total),
-    phones: [[s.invoice_city_1, s.invoice_phones_1], [s.invoice_city_2, s.invoice_phones_2]].filter((x) => x[1]),
     payment: o.payment_label || o.payment_method, pickup: o.shipping_fee > 0 ? '' : (o.city || ''),
   };
 }
 function invoicePage({ order: o, settings: s, isAdmin }) {
   const rows = invoiceRows(o);
-  const n = Math.max(20, rows.length);
-  const paid = o.paid_amount == null ? (o.status === 'completed' ? o.total : 0) : o.paid_amount;
-  const remaining = Math.round((o.total - paid) * 1000) / 1000;
-  const credit = o.payment_terms === 'credit';
-  const title = s.invoice_title || s.store_name;
+  const data = invoiceData(o);
+  const credit = data.credit;
   return '<!doctype html>' + String(html`<html lang="ar" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex"><title>فاتورة ${o.number} | ${s.store_name}</title>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800;900&display=swap">
-<link rel="stylesheet" href="/css/invoice.css?v=3"></head>
+<link rel="preload" href="/fonts/cairo.woff?v=1" as="font" type="font/woff" crossorigin>
+<link rel="stylesheet" href="/css/invoice.css?v=4"></head>
 <body data-order="${o.id}" data-total="${o.total}">
 <div class="bar no-print">
   ${isAdmin ? html`<a href="/admin#/orders/${o.id}">← رجوع للطلب</a>` : html`<a href="/order/${o.number}?t=${o.token}">← رجوع للطلب</a>`}
   <button type="button" class="share" data-inv-share>📤 إرسال صورة الفاتورة (واتساب)</button>
   <button type="button" data-inv-download>⬇ حفظ صورة</button>
   <button type="button" data-print>🖨 طباعة / PDF</button>
-  ${isAdmin ? html`<button type="button" data-save hidden>💾 حفظ المدفوع ونوع الدفع</button><span class="msg" data-msg></span>` : ''}
 </div>
-<main class="inv">
-  <header class="top">
-    <div class="shop">
-      <h1>${title}</h1>
-      <p class="sub">${s.invoice_subtitle || s.tagline}</p>
-      <p class="tag">${s.invoice_tagline || 'جملة - قطاعي'}</p>
-    </div>
-    <div class="brands">${(s.invoice_brands || '').split(/[,،·]/).map((b) => b.trim()).filter(Boolean).map((b) => html`<span>${b}</span>`)}</div>
-  </header>
-  <div class="row2">
-    <div class="addr">${s.invoice_address || s.address}</div>
-    <div class="num"><small>فاتورة رقم<br><i>INVOICE</i></small><b dir="ltr">${o.number}</b></div>
-    <div class="terms">
-      ${isAdmin ? html`<label><input type="radio" name="terms" value="cash" ${credit ? '' : raw('checked')}> نقداً</label><label><input type="radio" name="terms" value="credit" ${credit ? raw('checked') : ''}> أجل</label>`
-    : html`<span class="box ${credit ? '' : 'on'}"></span> نقداً <span class="box ${credit ? 'on' : ''}"></span> أجل`}
-    </div>
-  </div>
-  <div class="who">
-    <span class="lbl">الزبون</span><span class="fld">${o.customer_name}${o.phone ? html`<bdi dir="ltr" class="ph">${o.phone}</bdi>` : ''}</span>
-    <span class="lbl plain">التاريخ</span><span class="fld date" dir="ltr">${fmtDate(o.created_at)}</span>
-  </div>
-  <table class="items">
-    <colgroup><col class="c-m"><col class="c-desc"><col class="c-q"><col class="c-d"><col class="c-h"><col class="c-d"><col class="c-h"></colgroup>
-    <thead>
-      <tr><th rowspan="2">م</th><th rowspan="2">البيـــــان</th><th rowspan="2">الكمية</th><th colspan="2">سعر الوحدة</th><th colspan="2">السعر الإجمالي</th></tr>
-      <tr><th class="sm">دينـار</th><th class="sm">درهم</th><th class="sm">دينـار</th><th class="sm">درهم</th></tr>
-    </thead>
-    <tbody>
-      ${Array.from({ length: n }, (_, k) => { const r = rows[k]; return r
-    ? html`<tr><td class="m">${k + 1}</td><td class="desc">${r.name}${r.sku ? html` <small dir="ltr">${r.sku}</small>` : ''}</td><td class="q">${r.qty}</td>${r.unit === '' ? raw('<td></td><td></td>') : cells(r.unit)}${cells(r.total)}</tr>`
-    : html`<tr class="empty"><td class="m">${k + 1}</td><td></td><td></td><td></td><td></td><td></td><td></td></tr>`; })}
-    </tbody>
-  </table>
-  <section class="sums">
-    <div class="words"><span class="lbl">المبلغ بالحروف</span><span class="fld">${amountInWords(o.total)}</span></div>
-    <div class="totals">
-      <div><span>المجموع</span><b>${money3(o.total)} د.ل</b></div>
-      <div><span>المدفوع</span>${isAdmin ? html`<b><input type="number" min="0" step="0.001" value="${paid}" data-paid dir="ltr"> د.ل</b>` : html`<b>${money3(paid)} د.ل</b>`}</div>
-      <div><span>البـاقـي</span><b data-remaining>${money3(remaining)} د.ل</b></div>
-    </div>
-  </section>
-  <footer class="foot">
-    <div class="phones">
-      ${s.invoice_phones_1 ? html`<div><span>${s.invoice_city_1 || 'سبها'} :</span> <bdi dir="ltr">${s.invoice_phones_1}</bdi></div>` : ''}
-      ${s.invoice_phones_2 ? html`<div><span>${s.invoice_city_2 || 'طرابلس'} :</span> <bdi dir="ltr">${s.invoice_phones_2}</bdi></div>` : ''}
-    </div>
-    <div class="sign">التوقيع والختم<i></i></div>
-  </footer>
-  <p class="meta">طريقة الدفع: ${o.payment_label || o.payment_method}${o.address ? html` · العنوان: ${o.city ? o.city + ' — ' : ''}${o.address}` : ''}</p>
-</main>
-<div hidden id="inv-data" data-json="${JSON.stringify(invoiceData(o, s))}" data-wa="${waNumbers(s)}"></div>
-<script src="/js/invoice-img.js?v=3"></script>
-<script src="/js/invoice.js?v=4"></script>
+${isAdmin ? html`<div class="adm no-print">
+  <label><input type="radio" name="terms" value="cash" ${credit ? '' : raw('checked')}> نقداً</label>
+  <label><input type="radio" name="terms" value="credit" ${credit ? raw('checked') : ''}> آجلاً</label>
+  <label>المدفوع <input type="text" inputmode="decimal" value="${data.paid}" data-paid dir="ltr"> د.ل</label>
+  <span>الباقي: <b data-remaining>${money3(data.remaining)} د.ل</b></span>
+  <button type="button" data-save hidden>💾 حفظ</button><span class="msg" data-msg></span>
+</div>` : ''}
+<main class="sheets" data-inv-sheets><p class="loading">جارِ تجهيز الفاتورة...</p></main>
+<div class="sr-only"><table aria-label="تفاصيل الفاتورة">
+  <thead><tr><th>م</th><th>البيان</th><th>الكمية</th><th>سعر الوحدة</th><th>السعر الإجمالي</th></tr></thead>
+  <tbody>${rows.map((r, k) => html`<tr><td>${k + 1}</td><td>${r.name}</td><td>${r.qty}</td><td>${r.unit === '' ? '' : money3(r.unit)}</td><td>${money3(r.total)}</td></tr>`)}</tbody>
+  <tfoot><tr><td colspan="4">الزبون: ${o.customer_name} · الهاتف: ${o.phone || ''} · التاريخ: ${fmtDate(o.created_at)}</td><td>${money3(o.total)} د.ل — ${amountInWords(o.total)}</td></tr></tfoot>
+</table></div>
+<div hidden id="inv-data" data-json="${JSON.stringify(data)}" data-wa="${waNumbers(s)}"></div>
+<script src="/js/invoice-img.js?v=6"></script>
+<script src="/js/invoice.js?v=5"></script>
 </body></html>`);
 }
 

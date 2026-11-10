@@ -130,13 +130,13 @@ const DEFAULT_SETTINGS = {
   require_account: true,
   track_stock: false,      // false = unlimited quantity (no stock counting)
   delivery_enabled: false, // false = customers pick up from the shop
-  pickup_label: 'استلام من المحل — سبها، بالقرب من شركة لبيانا', // customers must create an account / log in before buying // second WhatsApp number — customers choose which one to message
+  pickup_label: 'استلام من المحل — سبها، بالقرب من شركة ليبيانا', // customers must create an account / log in before buying // second WhatsApp number — customers choose which one to message
   phone: '0926201329',
   // printed invoice (same as the shop's paper invoice)
   invoice_title: 'خبر عاجل',
   invoice_subtitle: 'لبيع قطع غيار الهواتف الذكية و مستلزماتها',
   invoice_tagline: 'جملة - قطاعي',
-  invoice_address: 'سبها - بالقرب من شركة لبيانا',
+  invoice_address: 'سبها - بالقرب من شركة ليبيانا',
   invoice_brands: 'MOXOM, Lenyós, THURAYA',
   invoice_city_1: 'سبها', invoice_phones_1: '092 641 6112 / 091 500 1122',
   invoice_city_2: 'طرابلس', invoice_phones_2: '092 747 4310 / 091 116 1000',
@@ -145,7 +145,7 @@ const DEFAULT_SETTINGS = {
   working_hours: 'يومياً من 9 صباحاً حتى 11 مساءً',
   facebook: '', instagram: '', tiktok: '',
   site_url: '',
-  seo_description: 'خبر عاجل سبها — متجر إكسسوارات الهواتف وقطع الغيار في سبها: شواحن، كابلات، سماعات، جرابات، واقيات شاشة، باور بانك، ساعات ذكية وأدوات صيانة. أسعار قطاعي وجملة وتوصيل لكل ليبيا.',
+  seo_description: 'خبر عاجل سبها — متجر إكسسوارات الهواتف وقطع الغيار في سبها: شواحن، كابلات، سماعات، جرابات، واقيات شاشة، باور بانك، ساعات ذكية وأدوات صيانة. أسعار قطاعي وجملة، والاستلام من المحل في سبها.',
   free_shipping_over: 0,
   shipping_zones: [
     { name: 'سبها — داخل المدينة', fee: 10 },
@@ -269,10 +269,10 @@ function seedCatalog(catalog, from = 0) {
       if (i < from) return;
       const sku = 'KA-' + String(2001 + i);
       if (get('SELECT id FROM products WHERE sku = ?', sku)) return;
-      const desc = [p.short, '', '## المواصفات', ...(p.specs || []).map((x) => '- ' + x), '', '## الضمان والتوصيل', '- يُفحص المنتج قبل التسليم، واستبدال للعيوب المصنعية.', '- توصيل داخل سبها ولكل المدن الليبية، والدفع عند الاستلام.'].join('\n');
+      const desc = [p.short, '', '## المواصفات', ...(p.specs || []).map((x) => '- ' + x), '', '## الضمان والاستلام', '- يُفحص المنتج قبل التسليم، واستبدال للعيوب المصنعية.', '- الاستلام من المحل في سبها، والدفع نقداً عند الاستلام.'].join('\n');
       const id = Number(run(`INSERT INTO products(name, slug, sku, category_id, brand, tags, short_description, description, price, stock, featured, active)
         VALUES(?,?,?,?,?,?,?,?,0,0,?,1)`, p.name, uniqueSlug('products', p.name), sku, categoryId(p.cat[0], p.cat[1]), p.brand || null,
-        [p.tags, p.model].filter(Boolean).join(', '), p.short, desc, FEATURED_MODELS.includes(p.model) ? 1 : 0).lastInsertRowid);
+        [p.tags, p.model, p.aka].filter(Boolean).join(', '), p.short, desc, FEATURED_MODELS.includes(p.model) ? 1 : 0).lastInsertRowid);
       (p.images || []).forEach((file, k) => {
         const full = path.join(imgDir, file); if (!fs.existsSync(full)) return;
         const thumbFile = full.replace(/\.webp$/, '.thumb.webp');
@@ -285,7 +285,7 @@ function seedCatalog(catalog, from = 0) {
   });
 }
 const SEED_PAGES = {
-  about: ['من نحن', `خبر عاجل سبها متجر متخصص في إكسسوارات الهواتف المحمولة وقطع الغيار وأدوات الصيانة، نخدم زبائننا في مدينة سبها وجميع المدن الليبية.
+  about: ['من نحن', `خبر عاجل سبها متجر متخصص في إكسسوارات الهواتف المحمولة وقطع الغيار وأدوات الصيانة، نخدم زبائننا في مدينة سبها من محلنا بالقرب من شركة ليبيانا.
 
 نوفر تشكيلة واسعة من الشواحن والكابلات والسماعات والجرابات وواقيات الشاشة والباور بانك والساعات الذكية، إضافة إلى قطع الغيار وأدوات الفنيين، بأسعار قطاعي للأفراد وأسعار جملة لأصحاب المحلات.
 
@@ -297,20 +297,20 @@ const SEED_PAGES = {
   privacy: ['سياسة الخصوصية', `نحترم خصوصيتك ونلتزم بحماية بياناتك.
 
 ## البيانات التي نجمعها
-عند إتمام الطلب نجمع: الاسم، رقم الهاتف، المدينة والعنوان، وأي ملاحظات تكتبها. نستخدم هذه البيانات فقط لتجهيز طلبك وتوصيله والتواصل معك بشأنه.
+عند إنشاء الحساب وإتمام الطلب نجمع: الاسم، رقم الهاتف، وأي ملاحظات تكتبها. نستخدم هذه البيانات فقط لتجهيز طلبك والتواصل معك بشأنه.
 
 ## مشاركة البيانات
-لا نبيع بياناتك ولا نشاركها مع أي طرف ثالث، باستثناء شركة/مندوب التوصيل بالقدر اللازم لإيصال الطلب.
+لا نبيع بياناتك ولا نشاركها مع أي طرف ثالث.
 
 ## التخزين المحلي
 يحفظ الموقع سلة المشتريات وقائمة المفضلة في متصفحك فقط لتسهيل التسوق.
 
 ## التواصل
 لأي استفسار حول بياناتك أو لطلب حذفها، تواصل معنا عبر صفحة اتصل بنا.`],
-  shipping: ['الشحن والاستبدال', `## التوصيل
-- داخل سبها: خلال 24 ساعة غالباً من تأكيد الطلب.
-- باقي المدن الليبية: من 2 إلى 5 أيام عمل حسب المنطقة.
-- تظهر رسوم التوصيل لكل منطقة في صفحة إتمام الطلب قبل التأكيد.
+  shipping: ['الاستلام والاستبدال', `## الاستلام من المحل
+- بعد الطلب أرسل صورة الفاتورة على واتساب، ونتواصل معك لما يكون طلبك جاهز.
+- الاستلام من محلنا في سبها — بالقرب من شركة ليبيانا.
+- لا توجد خدمة توصيل حالياً.
 
 ## الدفع
 الدفع نقداً عند الاستلام متاح لجميع الطلبات، إضافة إلى التحويل المصرفي والمحافظ الإلكترونية.
@@ -325,7 +325,7 @@ const SEED_PAGES = {
 راسلنا عبر واتساب أو اتصل بنا مباشرة، أو أرسل رسالتك من النموذج أدناه وسنرد عليك في أقرب وقت.`],
 };
 const SEED_BANNERS = [
-  ['كل ما يحتاجه هاتفك في مكان واحد', 'شواحن، سماعات، جرابات، واقيات شاشة وقطع غيار — بأسعار قطاعي وجملة وتوصيل لكل ليبيا.', 'تسوّق الآن', '/shop', 'navy'],
+  ['كل ما يحتاجه هاتفك في مكان واحد', 'شواحن، سماعات، جرابات، واقيات شاشة وقطع غيار — بأسعار قطاعي وجملة — والاستلام من المحل في سبها.', 'تسوّق الآن', '/shop', 'navy'],
   ['عروض الشحن السريع', 'شواحن وكابلات أصلية بخصومات خاصة لفترة محدودة.', 'شاهد العروض', '/shop?sale=1', 'orange'],
   ['أسعار جملة لأصحاب المحلات والفنيين', 'يُطبَّق سعر الجملة تلقائياً عند الوصول للكمية المحددة لكل منتج.', 'منتجات الجملة', '/shop?wholesale=1', 'teal'],
 ];
@@ -335,7 +335,7 @@ const SAMPLE_PRODUCTS = [
   ['كابل Type-C للشحن السريع 1 متر', ['الشواحن', 'وصلة (خيط شحن)'], 15, 10, 7, 50, '', null],
   ['جراب حماية شفاف مقاوم للصدمات', ['الكفرات'], 12, 8, 5, 30, 'جديد', null],
   ['واقي شاشة زجاج 9D', ['الحمايات', 'ضد كسر'], 10, 6, 3.5, 40, '', null],
-  ['سماعة بلوتوث TWS', ['السماعات', 'ايربودز'], 65, 52, 40, 12, 'عرض', 80],
+  ['سماعة بلوتوث TWS', ['السماعات', 'إيربودز'], 65, 52, 40, 12, 'عرض', 80],
   ['باور بانك 10000mAh', ['باور بنك', '20 ألف وأقل'], 85, 70, 58, 10, '', null],
   ['حامل هاتف مغناطيسي للسيارة', ['إكسسوارات السيارة', 'حامل تلفون'], 25, 18, 12, 18, '', null],
   ['ساعة ذكية مع سوار رياضي', ['الساعات الذكية'], 120, 98, 80, 8, 'جديد', null],
@@ -345,8 +345,14 @@ const SAMPLE_PRODUCTS = [
   ['بطارية هاتف (حسب الموديل)', ['قطع الغيار', 'بطاريات'], 75, 60, 48, 5, '', null],
 ];
 
+/** Category names/descriptions in correct Arabic — runs before the taxonomy sync so no duplicates are created; slugs (links) stay the same. */
+function fixCategoryNames() {
+  for (const [from, to] of [["راس شاحن", "رأس شاحن"], ["ايربودز", "إيربودز"], ["كفر ايربودز", "كفر إيربودز"], ["كفر مغناطيسي (MagSafe)", "كفر مغناطيسي (ماغ سيف)"], ["مشغل وشاحن سيارة (FM)", "مشغل وشاحن سيارة (إف إم)"]]) run('UPDATE categories SET name = ? WHERE name = ?', to, from);
+  for (const [from, to] of [["راس شاحن مع وصلة", "رأس شاحن مع وصلة"], ["كابلات Type-C وايفون ومايكرو", "كابلات تايب سي وآيفون ومايكرو"], ["سماعات رأس، ايربودز، سماعات رقبة وهاندز فري", "سماعات رأس، إيربودز، سماعات رقبة وهاندز فري"], ["PS3 و PS4", "بلايستيشن 3 و 4"]]) run('UPDATE categories SET description = ? WHERE description = ?', to, from);
+}
 function seed() {
   reindexSearch();
+  fixCategoryNames();
   const catalog = loadCatalog();
   if (!get("SELECT 1 AS x FROM settings WHERE key = '_taxonomy_v2'")) {
     tx(() => { seedTaxonomy(catalog.taxonomy); run("INSERT INTO settings(key, value) VALUES('_taxonomy_v2', 'true')"); });
@@ -378,6 +384,50 @@ function seed() {
     }
     refreshCatalogPhotos(catalog);
   }
+  applyContentFixes(String(process.env.SEED_CATALOG).toLowerCase() !== 'false' ? catalog : null);
+}
+
+/** One-time content fixes for stores created before these changes. Only text the admin hasn't edited is touched. */
+const CONTENT_FIXES = [
+  ["نخدم زبائننا في مدينة سبها وجميع المدن الليبية.", "نخدم زبائننا في مدينة سبها من محلنا بالقرب من شركة ليبيانا."],
+  ["نستخدم هذه البيانات فقط لتجهيز طلبك وتوصيله والتواصل معك بشأنه.", "نستخدم هذه البيانات فقط لتجهيز طلبك والتواصل معك بشأنه."],
+  ["عند إتمام الطلب نجمع: الاسم، رقم الهاتف، المدينة والعنوان، وأي ملاحظات تكتبها.", "عند إنشاء الحساب وإتمام الطلب نجمع: الاسم، رقم الهاتف، وأي ملاحظات تكتبها."],
+  ["لا نبيع بياناتك ولا نشاركها مع أي طرف ثالث، باستثناء شركة/مندوب التوصيل بالقدر اللازم لإيصال الطلب.", "لا نبيع بياناتك ولا نشاركها مع أي طرف ثالث."],
+  ["## التوصيل\n- داخل سبها: خلال 24 ساعة غالباً من تأكيد الطلب.\n- باقي المدن الليبية: من 2 إلى 5 أيام عمل حسب المنطقة.\n- تظهر رسوم التوصيل لكل منطقة في صفحة إتمام الطلب قبل التأكيد.", "## الاستلام من المحل\n- بعد الطلب أرسل صورة الفاتورة على واتساب، ونتواصل معك لما يكون طلبك جاهز.\n- الاستلام من محلنا في سبها — بالقرب من شركة ليبيانا.\n- لا توجد خدمة توصيل حالياً."],
+  ["بأسعار قطاعي وجملة وتوصيل لكل ليبيا.", "بأسعار قطاعي وجملة — والاستلام من المحل في سبها."],
+  ["أسعار قطاعي وجملة وتوصيل لكل ليبيا.", "أسعار قطاعي وجملة، والاستلام من المحل في سبها."],
+  ["- توصيل داخل سبها ولكل المدن الليبية، والدفع عند الاستلام.", "- الاستلام من المحل في سبها، والدفع نقداً عند الاستلام."],
+];
+function applyContentFixes(catalog) {
+  const VER = '1';
+  const r = get("SELECT value FROM settings WHERE key = '_content_fixes'");
+  if (r && JSON.parse(r.value) === VER) return;
+  tx(() => {
+    for (const [from, to] of CONTENT_FIXES) {
+      run('UPDATE pages SET content = REPLACE(content, ?, ?)', from, to);
+      run('UPDATE banners SET subtitle = REPLACE(subtitle, ?, ?)', from, to);
+      run('UPDATE products SET description = REPLACE(description, ?, ?)', from, to);
+      const seo = get("SELECT value FROM settings WHERE key = 'seo_description'");
+      if (seo && JSON.parse(seo.value).includes(from)) setSetting('seo_description', JSON.parse(seo.value).split(from).join(to));
+    }
+    run("UPDATE products SET description = REPLACE(description, '## الضمان والتوصيل', '## الضمان والاستلام')");
+    // «ليبيانا» spelling in saved settings and in orders' pickup line
+    for (const k of ['pickup_label', 'invoice_address', 'address', 'topline']) {
+      const v = get('SELECT value FROM settings WHERE key = ?', k);
+      if (v && typeof JSON.parse(v.value) === 'string' && JSON.parse(v.value).includes('شركة لبيانا')) setSetting(k, JSON.parse(v.value).split('شركة لبيانا').join('شركة ليبيانا'));
+    }
+    run("UPDATE orders SET city = REPLACE(city, 'شركة لبيانا', 'شركة ليبيانا') WHERE city LIKE '%شركة لبيانا%'");
+    run("UPDATE pages SET title = 'الاستلام والاستبدال' WHERE slug = 'shipping' AND title = 'الشحن والاستبدال'");
+    // Arabic product names: rename catalog products whose name the admin hasn't changed; the old name stays searchable
+    (catalog ? catalog.products : []).forEach((p, i) => {
+      if (!p.aka) return;
+      const prod = get('SELECT id, name, tags FROM products WHERE sku = ?', 'KA-' + String(2001 + i));
+      if (!prod || prod.name !== p.aka) return;
+      run('UPDATE products SET name = ?, tags = ? WHERE id = ?', p.name, [prod.tags, p.aka].filter(Boolean).join(', '), prod.id);
+      refreshSearchText(prod.id);
+    });
+  });
+  run("INSERT INTO settings(key, value) VALUES('_content_fixes', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", JSON.stringify(VER));
 }
 /** Replace re-processed catalog photos in an existing store — only photos the admin hasn't changed (same original file size). */
 function refreshCatalogPhotos(catalog) {
