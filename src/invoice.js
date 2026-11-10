@@ -100,7 +100,7 @@ ${isAdmin ? html`<div class="adm no-print">
   <tfoot><tr><td colspan="4">الزبون: ${o.customer_name} · الهاتف: ${o.phone || ''} · التاريخ: ${fmtDate(o.created_at)}</td><td>${money3(o.total)} د.ل — ${amountInWords(o.total)}</td></tr></tfoot>
 </table></div>
 <div hidden id="inv-data" data-json="${JSON.stringify(data)}" data-wa="${waNumbers(s)}"></div>
-<script src="/js/invoice-img.js?v=6"></script>
+<script src="/js/invoice-img.js?v=7"></script>
 <script src="/js/invoice.js?v=5"></script>
 </body></html>`);
 }

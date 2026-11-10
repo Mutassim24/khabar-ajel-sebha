@@ -549,7 +549,7 @@ ${fresh ? html`<div class="success-hero"><span class="check">✓</span><h1>تم 
   <p class="small muted">على التلفون: اضغط الزر الأخضر ← اختار <b>واتساب</b> ← اختار محادثة المحل وأرسل.</p>
 </div>
 <div hidden id="inv-data" data-json="${JSON.stringify(invoiceData(o))}" data-wa="${waNumbers(getSettings())}"></div>
-<script src="/js/invoice-img.js?v=6" defer></script>
+<script src="/js/invoice-img.js?v=7" defer></script>
 ${orderSummary(o)}
 <div class="center gap"><a class="btn ghost" href="/track?number=${encodeURIComponent(o.number)}">تتبع الطلب</a><a class="btn primary" href="/shop">متابعة التسوق</a></div>
 </div>`;

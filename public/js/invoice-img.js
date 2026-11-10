@@ -14,7 +14,7 @@
   var split = function (v) {
     if (v === '' || v === null || v === undefined) return ['', ''];
     var t = Math.round(Number(v) * 1000), neg = t < 0, a = Math.abs(t);
-    return [(neg ? '-' : '') + Math.floor(a / 1000).toLocaleString('en-US'), String(a % 1000).padStart(3, '0')];
+    return [(neg ? '-' : '') + Math.floor(a / 1000).toLocaleString('en-US'), a % 1000 ? String(a % 1000).padStart(3, '0') : ''];
   };
   var money = function (v) { return (Math.round(Number(v) * 1000) / 1000).toLocaleString('en-US', { maximumFractionDigits: 3 }) + ' د.ل'; };
 
